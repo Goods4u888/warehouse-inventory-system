@@ -1,0 +1,290 @@
+/* ============================================================================
+   Component styles. Every colour, radius and spacing value routes through
+   tokens.css — nothing raw belongs here.
+   ========================================================================= */
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--ui);
+  font-size: var(--t-body);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+  overflow-x: hidden;
+}
+img { display: block; max-width: 100%; }
+button { font-family: inherit; }
+a { color: inherit; }
+::selection { background: var(--signal); color: var(--signal-ink); }
+
+.mono { font-family: var(--mono); }
+
+/* ---- App shell ------------------------------------------------------------ */
+.app {
+  max-width: var(--shell);
+  margin: 0 auto;
+  min-height: 100vh;
+  position: relative;
+}
+
+.header {
+  position: sticky; top: 0; z-index: var(--z-header);
+  height: var(--header-h);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 var(--pad);
+  background: var(--ground);
+  border-bottom: 1px solid var(--line);
+}
+.header-title {
+  font-size: var(--t-sec);
+  font-weight: 600;
+  letter-spacing: -.01em;
+}
+.header-sub {
+  font-family: var(--mono);
+  font-size: var(--t-micro);
+  color: var(--ink-3);
+}
+
+main {
+  padding: var(--s5) var(--pad) calc(var(--tabbar-h) + var(--s8));
+}
+
+/* ---- Bottom tab bar --------------------------------------------------------- */
+.tabbar {
+  position: fixed; inset: auto 0 0 0; z-index: var(--z-bar);
+  max-width: var(--shell); margin: 0 auto;
+  height: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
+  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
+  background: var(--paper); border-top: 1px solid var(--line);
+  box-shadow: var(--lift-2);
+}
+.tabbar button {
+  display: grid; place-items: center; gap: 3px;
+  background: none; border: none; cursor: pointer;
+  font-size: var(--t-micro); color: var(--ink-3);
+  min-height: 48px; touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.tabbar button svg { width: 20px; height: 20px; stroke: currentColor; }
+.tabbar button[aria-current="page"] { color: var(--ink); font-weight: 600; }
+
+/* ---- Buttons: the pill, in a few skins ------------------------------------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--s2);
+  border-radius: var(--r-control);
+  padding: 12px 20px;
+  font-size: var(--t-meta); font-weight: 600;
+  border: 1px solid transparent;
+  cursor: pointer; min-height: 44px;
+  transition: background .2s var(--ease), border-color .2s var(--ease), opacity .2s var(--ease);
+  touch-action: manipulation;
+}
+.btn-primary { background: var(--signal); color: var(--signal-ink); }
+.btn-primary:hover { background: var(--signal-hover); }
+.btn-primary:disabled { opacity: .4; cursor: not-allowed; }
+.btn-outline { background: transparent; border-color: var(--line-strong); color: var(--ink); }
+.btn-outline:hover { background: var(--paper-2); }
+.btn-ghost { background: transparent; color: var(--ink-2); padding: 8px 12px; min-height: 36px; }
+.btn-ghost:hover { color: var(--ink); }
+.btn-danger { background: var(--discrepancy); color: #fff; }
+.btn-block { width: 100%; }
+.btn-sm { padding: 8px 14px; min-height: 36px; font-size: var(--t-micro); }
+
+/* ---- Cards ------------------------------------------------------------------ */
+.card {
+  background: var(--card);
+  border-radius: var(--r-media);
+  box-shadow: var(--lift-1);
+  padding: var(--s4);
+}
+.card + .card { margin-top: var(--s3); }
+.card-row { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); }
+.card-title { font-weight: 600; font-size: var(--t-card); }
+.card-meta { color: var(--ink-3); font-size: var(--t-micro); margin-top: 2px; }
+.card-list { display: flex; flex-direction: column; gap: var(--s3); }
+
+.stat-figure { font-family: var(--mono); font-size: var(--t-h1); font-weight: 600; letter-spacing: -.01em; }
+.stat-label { font-size: var(--t-micro); color: var(--ink-3); letter-spacing: .04em; text-transform: uppercase; }
+
+/* ---- Badges / chips ---------------------------------------------------------- */
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  border-radius: var(--r-commit);
+  padding: 4px 10px;
+  font-size: var(--t-micro); font-weight: 600;
+  white-space: nowrap;
+}
+.chip-cat-cement    { background: var(--cat-cement-wash);    color: var(--cat-cement); }
+.chip-cat-steel     { background: var(--cat-steel-wash);     color: var(--cat-steel); }
+.chip-cat-aggregate { background: var(--cat-aggregate-wash); color: var(--cat-aggregate); }
+.chip-cat-hardware  { background: var(--cat-hardware-wash);  color: var(--cat-hardware); }
+.chip-cat-other     { background: var(--cat-other-wash);     color: var(--cat-other); }
+
+.chip-ok  { background: var(--ok-wash); color: var(--ok); }
+.chip-low { background: var(--low-wash); color: var(--low); }
+.chip-discrepancy { background: var(--discrepancy-wash); color: var(--discrepancy); }
+.chip-neutral { background: var(--paper-2); color: var(--ink-2); }
+
+.dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
+
+/* ---- Facets / segmented control ----------------------------------------------- */
+.facets { display: flex; gap: var(--s2); overflow-x: auto; padding-bottom: var(--s1); margin-bottom: var(--s4); }
+.facets::-webkit-scrollbar { display: none; }
+.facet {
+  flex: none; border-radius: var(--r-commit); border: 1px solid var(--line-mid);
+  padding: 7px 14px; font-size: var(--t-micro); font-weight: 600; color: var(--ink-2);
+  background: var(--paper); cursor: pointer; touch-action: manipulation;
+}
+.facet[aria-pressed="true"] { background: var(--signal); color: var(--signal-ink); border-color: var(--signal); }
+
+.segmented {
+  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
+  background: var(--paper-2); border-radius: var(--r-control); padding: 3px; gap: 3px;
+  margin-bottom: var(--s4);
+}
+.segmented button {
+  border: none; background: transparent; border-radius: calc(var(--r-control) - 3px);
+  padding: 8px 6px; font-size: var(--t-micro); font-weight: 600; color: var(--ink-2);
+  cursor: pointer;
+}
+.segmented button[aria-pressed="true"] { background: var(--paper); color: var(--ink); box-shadow: var(--lift-1); }
+
+/* ---- Section headers -------------------------------------------------------- */
+.section-head { display: flex; align-items: baseline; justify-content: space-between; margin: var(--s6) 0 var(--s3); }
+.section-head:first-child { margin-top: 0; }
+.section-head h2 { font-size: var(--t-sec); margin: 0; font-weight: 600; }
+.section-head .count { font-family: var(--mono); color: var(--ink-3); font-size: var(--t-micro); }
+
+.eyebrow {
+  font-family: var(--mono); font-size: var(--t-micro); letter-spacing: .08em;
+  text-transform: uppercase; color: var(--ink-3); margin: 0 0 var(--s2);
+}
+
+.empty {
+  text-align: center; padding: var(--s7) var(--s4); color: var(--ink-3);
+  border: 1px dashed var(--line-mid); border-radius: var(--r-media);
+}
+.empty p { margin: 0 0 var(--s3); }
+
+/* ---- Forms -------------------------------------------------------------------- */
+.field { margin-bottom: var(--s4); }
+.field label {
+  display: block; font-size: var(--t-micro); font-weight: 600; color: var(--ink-2);
+  margin-bottom: var(--s2);
+}
+.field input, .field select, .field textarea {
+  width: 100%; border: 1px solid var(--line-mid); border-radius: var(--r-control);
+  padding: 11px var(--s3); font-size: var(--t-body); font-family: inherit;
+  background: var(--paper); color: var(--ink);
+}
+.field textarea { resize: vertical; min-height: 72px; }
+.field input:focus, .field select:focus, .field textarea:focus {
+  outline: none; border-color: var(--ink-3); box-shadow: 0 0 0 3px var(--signal-wash);
+}
+.field-hint { font-size: var(--t-micro); color: var(--ink-3); margin-top: var(--s1); }
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3); }
+
+.form-error {
+  background: var(--discrepancy-wash); color: var(--discrepancy);
+  border-radius: var(--r-control); padding: var(--s3); font-size: var(--t-meta);
+  margin-bottom: var(--s4);
+}
+.form-success {
+  background: var(--ok-wash); color: var(--ok);
+  border-radius: var(--r-control); padding: var(--s3); font-size: var(--t-meta);
+  margin-bottom: var(--s4);
+}
+
+/* ---- Sheet (bottom modal) ------------------------------------------------------ */
+.scrim {
+  position: fixed; inset: 0; z-index: var(--z-scrim);
+  background: rgba(20,20,16,.5);
+  display: flex; align-items: flex-end; justify-content: center;
+}
+.scrim[hidden] { display: none; }
+.sheet {
+  width: 100%; max-width: var(--shell);
+  max-height: 88vh; overflow-y: auto;
+  background: var(--paper);
+  border-radius: var(--r-sheet) var(--r-sheet) 0 0;
+  padding: var(--s5) var(--pad) calc(var(--s6) + env(safe-area-inset-bottom));
+  box-shadow: var(--lift-3);
+}
+.sheet-handle { width: 36px; height: 4px; border-radius: var(--r-commit); background: var(--line-strong); margin: 0 auto var(--s4); }
+.sheet-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--s4); }
+.sheet-head h3 { margin: 0; font-size: var(--t-sec); font-weight: 600; }
+.sheet-close { background: none; border: none; color: var(--ink-3); font-size: 20px; cursor: pointer; padding: var(--s1); }
+
+/* ---- Scan view ------------------------------------------------------------------ */
+.scan-frame {
+  position: relative; width: 100%; aspect-ratio: 1 / 1; max-width: 320px;
+  margin: 0 auto var(--s4); border-radius: var(--r-media); overflow: hidden;
+  background: var(--ink); box-shadow: var(--lift-2);
+}
+.scan-frame video { width: 100%; height: 100%; object-fit: cover; }
+.scan-frame .reticle {
+  position: absolute; inset: 12%; border: 2px solid rgba(255,255,255,.85);
+  border-radius: var(--r-media); pointer-events: none;
+}
+.scan-note { text-align: center; color: var(--ink-3); font-size: var(--t-micro); margin-bottom: var(--s4); }
+
+/* ---- Sticker (printable) --------------------------------------------------------- */
+.sticker {
+  display: flex; align-items: center; gap: var(--s3);
+  background: #fff; color: #111; border: 1px solid #ccc; border-radius: 8px;
+  padding: var(--s3); width: fit-content;
+}
+.sticker-sku { font-weight: 700; font-size: 13px; }
+.sticker-lot { font-family: var(--mono); font-size: 12px; margin-top: 2px; }
+.sticker-date { font-size: 11px; color: #555; margin-top: 2px; }
+
+/* ---- Tables (reports) -------------------------------------------------------------- */
+.table-scroll { overflow-x: auto; border-radius: var(--r-media); box-shadow: var(--lift-1); }
+table { width: 100%; border-collapse: collapse; background: var(--card); font-size: var(--t-meta); }
+th, td { text-align: left; padding: var(--s3); white-space: nowrap; }
+th {
+  font-size: var(--t-micro); text-transform: uppercase; letter-spacing: .04em;
+  color: var(--ink-3); border-bottom: 1px solid var(--line);
+}
+td { border-bottom: 1px solid var(--line); }
+tr:last-child td { border-bottom: none; }
+td.num, th.num { text-align: right; font-family: var(--mono); }
+
+/* ---- Toast ------------------------------------------------------------------------- */
+.toast {
+  position: fixed; left: 50%; bottom: calc(var(--tabbar-h) + var(--s4));
+  transform: translateX(-50%);
+  background: var(--ink); color: var(--ground);
+  padding: 12px 20px; border-radius: var(--r-control);
+  font-size: var(--t-meta); box-shadow: var(--lift-3);
+  z-index: var(--z-sheet); max-width: calc(100% - var(--s6));
+  text-align: center;
+}
+.toast.error { background: var(--discrepancy); }
+.toast.success { background: var(--ok); }
+
+/* ---- Loading skeleton ---------------------------------------------------------------- */
+.skeleton {
+  background: linear-gradient(90deg, var(--paper-2) 25%, var(--line) 37%, var(--paper-2) 63%);
+  background-size: 400% 100%;
+  animation: shimmer 1.4s ease infinite;
+  border-radius: var(--r-control);
+}
+@keyframes shimmer { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; }
+}
+
+/* ---- Print ------------------------------------------------------------------------------ */
+@media print {
+  .header, .tabbar, .btn, .toast { display: none !important; }
+  body { background: #fff; }
+  main { padding: 0; }
+}

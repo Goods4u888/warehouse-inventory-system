@@ -1,0 +1,121 @@
+/* ============================================================================
+   Design tokens — instrument register (prom-design system B shape)
+   Subject: a construction-materials warehouse. The ground is poured-concrete
+   grey, the ink is steel charcoal, and the category triads are drawn from the
+   materials themselves (cement dust, galvanized steel, sand, rust hardware)
+   rather than a generic brand palette. No raw hex or px belongs in app.css —
+   everything routes through here.
+   ========================================================================= */
+
+:root {
+  /* surfaces: poured concrete, never pure white */
+  --ground:   #EFEDE6;
+  --paper:    #FFFFFF;
+  --paper-2:  #E7E2D4;
+  --card:     #FFFFFF;
+
+  /* line ramp — hierarchy through borders, not just existence */
+  --line:        #DAD3C2;
+  --line-mid:    #C2B9A2;
+  --line-strong: #8B8370;
+
+  /* ink ramp — steel charcoal, faint green-grey undertone */
+  --ink:   #1D211C;
+  --ink-2: #4B5147;
+  --ink-3: #6B7066;
+
+  /* signal — the one action colour, near-black like a tool, not a brand */
+  --signal:       #1A1D18;
+  --signal-hover: #2C3128;
+  --signal-wash:  #E7EAE2;
+  --signal-ink:   #FFFFFF;
+
+  /* state tokens — product facts, not decoration */
+  --ok:           #3F6B4A;  --ok-wash:           #E6EFE7;
+  --low:          #A85A2A;  --low-wash:          #F5E7D9;
+  --discrepancy:  #A23B3B;  --discrepancy-wash:  #F5E1DF;
+
+  /* material category triads: base / wash / beacon */
+  --cat-cement:    #7D7666;  --cat-cement-wash:    #EFEDE6;  --cat-cement-beacon:    #A9A18C;
+  --cat-steel:     #33525C;  --cat-steel-wash:     #E6EDEE;  --cat-steel-beacon:     #5F8B98;
+  --cat-aggregate: #7C6A45;  --cat-aggregate-wash: #F1EBDC;  --cat-aggregate-beacon: #B39D66;
+  --cat-hardware:  #6B4630;  --cat-hardware-wash:  #F1E5DC;  --cat-hardware-beacon:  #A9765A;
+  --cat-other:     #5A5F58;  --cat-other-wash:     #EAEAE6;  --cat-other-beacon:     #8B9086;
+
+  /* elevation: ring + shadow, crisp on this ground */
+  --lift-1: 0 0 0 1px rgba(29,33,28,.08), 0 1px 2px rgba(29,33,28,.05);
+  --lift-2: 0 0 0 1px rgba(29,33,28,.06), 0 6px 16px rgba(29,33,28,.10);
+  --lift-3: 0 12px 32px rgba(29,33,28,.20);
+
+  /* radius by role, not by size */
+  --r-control: 10px;
+  --r-media:   12px;
+  --r-sheet:   20px;
+  --r-commit:  999px;
+
+  /* named z ladder */
+  --z-bar: 45; --z-scrim: 48; --z-header: 50; --z-menu: 52; --z-sheet: 55;
+
+  /* type scale — one sans, many sizes (instrument register) */
+  --t-micro: .8125rem;
+  --t-meta:  .875rem;
+  --t-body:  1rem;
+  --t-lede:  1.0625rem;
+  --t-card:  1rem;
+  --t-sec:   1.3125rem;
+  --t-h1:    1.75rem;
+
+  /* spacing, 4px base */
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px; --s8:64px;
+
+  /* layout */
+  --pad:   clamp(16px, 4vw, 28px);
+  --shell: 720px;
+
+  /* app chrome as tokens — every scroll container references these */
+  --header-h:  56px;
+  --tabbar-h:  60px;
+  --actionbar-h: 64px;
+
+  /* one face across Thai + Latin; one mono for codes, quantities, timestamps */
+  --ui:   'IBM Plex Sans Thai', 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', monospace;
+
+  --ease: cubic-bezier(.23,1,.32,1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ground:   #141713;
+    --paper:    #1B1E19;
+    --paper-2:  #23271F;
+    --card:     #1F231D;
+
+    --line:        #33372E;
+    --line-mid:    #454A3E;
+    --line-strong: #6B7060;
+
+    --ink:   #E9E7DE;
+    --ink-2: #AEB3A6;
+    --ink-3: #868C7D;
+
+    --signal:       #E9E7DE;
+    --signal-hover: #F5F3EA;
+    --signal-wash:  #2A2D25;
+    --signal-ink:   #14170F;
+
+    --ok:          #7FB889;  --ok-wash:          #1E2A20;
+    --low:         #E29A5C;  --low-wash:         #362718;
+    --discrepancy: #E2807D;  --discrepancy-wash: #362020;
+
+    --cat-cement:    #B7AF98;  --cat-cement-wash:    #26251E;  --cat-cement-beacon:    #8F8770;
+    --cat-steel:     #7FAFBC;  --cat-steel-wash:     #1C2529;  --cat-steel-beacon:     #4C7883;
+    --cat-aggregate: #C7AD73;  --cat-aggregate-wash: #292317;  --cat-aggregate-beacon: #9C8352;
+    --cat-hardware:  #C08A6A;  --cat-hardware-wash:  #2A211B;  --cat-hardware-beacon:  #8E5F44;
+    --cat-other:     #A2A79A;  --cat-other-wash:     #24261F;  --cat-other-beacon:     #6E7367;
+
+    --lift-1: 0 0 0 1px rgba(0,0,0,.35), 0 1px 2px rgba(0,0,0,.3);
+    --lift-2: 0 0 0 1px rgba(0,0,0,.3), 0 6px 16px rgba(0,0,0,.4);
+    --lift-3: 0 12px 32px rgba(0,0,0,.5);
+  }
+}

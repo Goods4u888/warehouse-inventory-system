@@ -1,0 +1,292 @@
+-- ============================================================================
+-- Warehouse Inventory System — v1 schema
+-- Construction materials store: receiving (รับของ) + requisition (เบิกของ)
+--
+-- Run this once in the Supabase SQL Editor (Project → SQL Editor → New query),
+-- or via `supabase db push` if you're using the CLI.
+--
+-- v1 note on security: Row Level Security is enabled but the policies below
+-- grant full access to the anon key. That's appropriate for a first version
+-- used internally by trusted staff on a private link. Before this goes out to
+-- more people or the public internet, replace these policies with ones scoped
+-- to Supabase Auth roles (requester / staff / admin) — see README.md.
+-- ============================================================================
+
+create extension if not exists pgcrypto;
+
+-- ----------------------------------------------------------------------------
+-- 1. SKUs — item master
+-- ----------------------------------------------------------------------------
+create table if not exists skus (
+  id               uuid primary key default gen_random_uuid(),
+  sku_code         text unique not null,
+  name             text not null,
+  category         text not null default 'Uncategorized',
+  base_uom         text not null,
+  alt_uom          text,
+  conversion_factor numeric,             -- 1 alt_uom = conversion_factor * base_uom
+  min_threshold    numeric not null default 0,
+  is_active        boolean not null default true,
+  created_at       timestamptz not null default now()
+);
+
+comment on table skus is 'Item master. One row per material type (e.g. "Portland Cement 50kg").';
+comment on column skus.conversion_factor is 'How many base_uom in one alt_uom, e.g. 1 pallet = 50 bags -> 50.';
+
+-- ----------------------------------------------------------------------------
+-- 2. Lots — one row per receiving event; the QR sticker encodes lot_code
+-- ----------------------------------------------------------------------------
+create table if not exists lots (
+  id             uuid primary key default gen_random_uuid(),
+  lot_code       text unique not null,
+  sku_id         uuid not null references skus(id) on delete restrict,
+  qty_received   numeric not null check (qty_received > 0),
+  balance        numeric not null check (balance >= 0),
+  uom            text not null,
+  receive_date   date not null default current_date,
+  received_by    text,
+  supplier_ref   text,
+  created_at     timestamptz not null default now()
+);
+
+comment on table lots is 'A physical batch received on one date. The QR code printed on its sticker encodes lot_code only — never quantity, which changes after printing.';
+
+create index if not exists lots_sku_id_idx on lots(sku_id);
+
+-- ----------------------------------------------------------------------------
+-- 3. Requests — a requester's ask, fulfilled by scanning a lot
+-- ----------------------------------------------------------------------------
+create table if not exists requests (
+  id              uuid primary key default gen_random_uuid(),
+  request_code    text unique not null,
+  requester_name  text not null,
+  sku_id          uuid not null references skus(id) on delete restrict,
+  qty_requested   numeric not null check (qty_requested > 0),
+  needed_by       date,
+  notes           text,
+  status          text not null default 'pending'
+                    check (status in ('pending','preparing','ready','fulfilled','cancelled')),
+  created_at      timestamptz not null default now()
+);
+
+create index if not exists requests_status_idx on requests(status);
+create index if not exists requests_sku_id_idx on requests(sku_id);
+
+-- ----------------------------------------------------------------------------
+-- 4. Transactions — every receive / issue event (the movement ledger)
+-- ----------------------------------------------------------------------------
+create table if not exists transactions (
+  id            uuid primary key default gen_random_uuid(),
+  type          text not null check (type in ('receive','issue')),
+  lot_id        uuid not null references lots(id) on delete restrict,
+  request_id    uuid references requests(id) on delete set null,
+  qty           numeric not null,
+  uom           text not null,
+  performed_by  text,
+  created_at    timestamptz not null default now()
+);
+
+create index if not exists transactions_lot_id_idx on transactions(lot_id);
+create index if not exists transactions_created_at_idx on transactions(created_at desc);
+
+-- ----------------------------------------------------------------------------
+-- 5. Discrepancies — issued qty != requested qty (variance record)
+-- ----------------------------------------------------------------------------
+create table if not exists discrepancies (
+  id              uuid primary key default gen_random_uuid(),
+  transaction_id  uuid not null references transactions(id) on delete cascade,
+  request_id      uuid not null references requests(id) on delete cascade,
+  requested_qty   numeric not null,
+  actual_qty      numeric not null,
+  variance        numeric generated always as (actual_qty - requested_qty) stored,
+  notes           text,
+  created_at      timestamptz not null default now()
+);
+
+-- ----------------------------------------------------------------------------
+-- 6. Views — current stock, aggregated from lots
+-- ----------------------------------------------------------------------------
+create or replace view stock_by_sku as
+select
+  s.id            as sku_id,
+  s.sku_code,
+  s.name,
+  s.category,
+  s.base_uom,
+  s.min_threshold,
+  coalesce(sum(l.balance), 0)                    as on_hand,
+  coalesce(sum(l.balance), 0) < s.min_threshold  as is_low
+from skus s
+left join lots l on l.sku_id = s.id
+where s.is_active
+group by s.id;
+
+create or replace view low_stock as
+select * from stock_by_sku where is_low order by on_hand asc;
+
+create or replace view stock_by_lot as
+select
+  l.id as lot_id, l.lot_code, l.balance, l.qty_received, l.uom,
+  l.receive_date, l.supplier_ref,
+  s.id as sku_id, s.sku_code, s.name, s.category
+from lots l
+join skus s on s.id = l.sku_id
+order by l.receive_date desc;
+
+create or replace view movement_history as
+select
+  t.id as transaction_id, t.type, t.qty, t.uom, t.performed_by, t.created_at,
+  l.lot_code, s.sku_code, s.name as sku_name,
+  r.request_code
+from transactions t
+join lots l on l.id = t.lot_id
+join skus s on s.id = l.sku_id
+left join requests r on r.id = t.request_id
+order by t.created_at desc;
+
+create or replace view discrepancy_report as
+select
+  d.id, d.requested_qty, d.actual_qty, d.variance, d.notes, d.created_at,
+  r.request_code, r.requester_name,
+  s.sku_code, s.name as sku_name,
+  l.lot_code
+from discrepancies d
+join requests r on r.id = d.request_id
+join transactions t on t.id = d.transaction_id
+join lots l on l.id = t.lot_id
+join skus s on s.id = l.sku_id
+order by d.created_at desc;
+
+-- ----------------------------------------------------------------------------
+-- 7. RPCs — the two writes that must be atomic
+-- ----------------------------------------------------------------------------
+
+-- Receiving: create a lot + its opening transaction, return the new lot
+-- (the caller renders lot_code as a QR code for the sticker).
+create or replace function receive_stock(
+  p_sku_id uuid, p_qty numeric, p_uom text,
+  p_received_by text default null, p_supplier_ref text default null
+) returns lots
+language plpgsql
+as $$
+declare
+  v_lot lots;
+  v_lot_code text;
+begin
+  if p_qty <= 0 then
+    raise exception 'Quantity must be greater than zero';
+  end if;
+
+  v_lot_code := 'LOT-' || to_char(now(), 'YYMMDD') || '-'
+                || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 6));
+
+  insert into lots (lot_code, sku_id, qty_received, balance, uom, received_by, supplier_ref)
+  values (v_lot_code, p_sku_id, p_qty, p_qty, p_uom, p_received_by, p_supplier_ref)
+  returning * into v_lot;
+
+  insert into transactions (type, lot_id, qty, uom, performed_by)
+  values ('receive', v_lot.id, p_qty, p_uom, p_received_by);
+
+  return v_lot;
+end;
+$$;
+
+-- Issuing: the scan-to-deduct step. Locks the lot row so two staff scanning
+-- the same lot at once cannot both succeed against a balance that is no
+-- longer there. Branches exactly like the workflow diagram: an exact match
+-- closes the request quietly; a mismatch still deducts stock but leaves a
+-- discrepancy record rather than silently accepting or blocking it.
+create or replace function issue_stock(
+  p_lot_id uuid, p_request_id uuid, p_actual_qty numeric, p_performed_by text default null
+) returns jsonb
+language plpgsql
+as $$
+declare
+  v_lot lots;
+  v_request requests;
+  v_txn transactions;
+  v_discrepancy discrepancies;
+  v_has_discrepancy boolean := false;
+begin
+  if p_actual_qty <= 0 then
+    raise exception 'Quantity must be greater than zero';
+  end if;
+
+  select * into v_lot from lots where id = p_lot_id for update;
+  if not found then
+    raise exception 'Lot not found';
+  end if;
+  if v_lot.balance < p_actual_qty then
+    raise exception 'Insufficient balance on lot %: % available, % requested',
+      v_lot.lot_code, v_lot.balance, p_actual_qty;
+  end if;
+
+  select * into v_request from requests where id = p_request_id for update;
+  if not found then
+    raise exception 'Request not found';
+  end if;
+  if v_request.status = 'fulfilled' then
+    raise exception 'Request % is already fulfilled', v_request.request_code;
+  end if;
+
+  update lots set balance = balance - p_actual_qty where id = p_lot_id;
+
+  insert into transactions (type, lot_id, request_id, qty, uom, performed_by)
+  values ('issue', p_lot_id, p_request_id, p_actual_qty, v_lot.uom, p_performed_by)
+  returning * into v_txn;
+
+  if p_actual_qty <> v_request.qty_requested then
+    v_has_discrepancy := true;
+    insert into discrepancies (transaction_id, request_id, requested_qty, actual_qty)
+    values (v_txn.id, p_request_id, v_request.qty_requested, p_actual_qty)
+    returning * into v_discrepancy;
+  end if;
+
+  update requests set status = 'fulfilled' where id = p_request_id;
+
+  return jsonb_build_object(
+    'transaction', to_jsonb(v_txn),
+    'has_discrepancy', v_has_discrepancy,
+    'discrepancy', to_jsonb(v_discrepancy)
+  );
+end;
+$$;
+
+grant execute on function receive_stock(uuid, numeric, text, text, text) to anon, authenticated;
+grant execute on function issue_stock(uuid, uuid, numeric, text) to anon, authenticated;
+
+-- ----------------------------------------------------------------------------
+-- 8. Row Level Security (v1: open to anon — see note at top of file)
+-- ----------------------------------------------------------------------------
+alter table skus enable row level security;
+alter table lots enable row level security;
+alter table requests enable row level security;
+alter table transactions enable row level security;
+alter table discrepancies enable row level security;
+
+drop policy if exists "anon full access - skus" on skus;
+create policy "anon full access - skus" on skus for all using (true) with check (true);
+
+drop policy if exists "anon full access - lots" on lots;
+create policy "anon full access - lots" on lots for all using (true) with check (true);
+
+drop policy if exists "anon full access - requests" on requests;
+create policy "anon full access - requests" on requests for all using (true) with check (true);
+
+drop policy if exists "anon full access - transactions" on transactions;
+create policy "anon full access - transactions" on transactions for all using (true) with check (true);
+
+drop policy if exists "anon full access - discrepancies" on discrepancies;
+create policy "anon full access - discrepancies" on discrepancies for all using (true) with check (true);
+
+-- ----------------------------------------------------------------------------
+-- 9. Seed data — a handful of construction-material SKUs so the app has
+--    something real to show the moment it's wired up. Delete freely.
+-- ----------------------------------------------------------------------------
+insert into skus (sku_code, name, category, base_uom, alt_uom, conversion_factor, min_threshold) values
+  ('CEM-001', 'Portland Cement 50kg', 'Cement', 'bag', 'pallet', 50, 100),
+  ('REB-012', 'Rebar 12mm x 6m', 'Steel', 'piece', 'bundle', 20, 200),
+  ('SND-001', 'Fine Sand', 'Aggregate', 'cu.m', null, null, 20),
+  ('PIP-004', 'PVC Pipe 4in x 4m', 'Pipe & Fittings', 'piece', null, null, 50),
+  ('NAI-002', 'Common Nails 3in', 'Hardware', 'kg', 'box', 25, 30)
+on conflict (sku_code) do nothing;
