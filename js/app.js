@@ -32,6 +32,9 @@ function statusLabel(status) {
   };
   return map[status] || status;
 }
+const STATUS_ICONS = {
+  all: 'list', pending: 'clock', preparing: 'package', ready: 'checkCircle', fulfilled: 'checkSquare',
+};
 
 // ---- Toast -------------------------------------------------------------------
 function toast(msg, kind = '') {
@@ -108,6 +111,12 @@ document.getElementById('btn-refresh').addEventListener('click', () => showView(
 // ============================================================================
 let stockRows = [];
 let stockFacet = 'all';
+let stockSearch = '';
+
+document.getElementById('stock-search').addEventListener('input', (e) => {
+  stockSearch = e.target.value;
+  renderStock();
+});
 
 async function loadStock() {
   const list = document.getElementById('stock-list');
@@ -126,7 +135,7 @@ function renderStockFacets() {
   const cats = ['all', ...new Set(stockRows.map((r) => r.category))];
   const el = document.getElementById('stock-facets');
   el.innerHTML = cats.map((c) => `
-    <button class="facet" data-cat="${escapeHtml(c)}" aria-pressed="${c === stockFacet}">${c === 'all' ? t('facetAll') : escapeHtml(c)}</button>
+    <button class="facet" data-cat="${escapeHtml(c)}" aria-pressed="${c === stockFacet}">${icon(c === 'all' ? 'list' : catIcon(c), 14)}<span>${c === 'all' ? t('facetAll') : escapeHtml(c)}</span></button>
   `).join('');
   el.querySelectorAll('.facet').forEach((btn) => {
     btn.addEventListener('click', () => { stockFacet = btn.dataset.cat; renderStockFacets(); renderStock(); });
@@ -134,13 +143,17 @@ function renderStockFacets() {
 }
 
 function renderStock() {
-  const rows = stockFacet === 'all' ? stockRows : stockRows.filter((r) => r.category === stockFacet);
+  let rows = stockFacet === 'all' ? stockRows : stockRows.filter((r) => r.category === stockFacet);
+  const q = stockSearch.trim().toLowerCase();
+  if (q) {
+    rows = rows.filter((r) => r.sku_code.toLowerCase().includes(q) || r.name.toLowerCase().includes(q));
+  }
   document.getElementById('stock-total').textContent = stockRows.length;
   document.getElementById('stock-low-count').textContent = stockRows.filter((r) => r.is_low).length;
 
   const list = document.getElementById('stock-list');
   if (!rows.length) {
-    list.innerHTML = `<div class="empty"><p>${t('emptyStockCategory')}</p></div>`;
+    list.innerHTML = `<div class="empty"><p>${q ? t('emptySearchResults', escapeHtml(stockSearch.trim())) : t('emptyStockCategory')}</p></div>`;
     return;
   }
   list.innerHTML = rows.map((r) => `
@@ -155,7 +168,7 @@ function renderStock() {
         </div>
       </div>
       <div class="card-row" style="margin-top:var(--s3)">
-        <span class="chip chip-cat-${catClass(r.category)}">${escapeHtml(r.category)}</span>
+        <span class="chip chip-cat-${catClass(r.category)}">${icon(catIcon(r.category), 12)}${escapeHtml(r.category)}</span>
         ${r.is_low
           ? `<span class="chip chip-low"><span class="dot"></span>${t('chipBelowThreshold', fmtQty(r.min_threshold))}</span>`
           : `<span class="chip chip-ok"><span class="dot"></span>${t('chipOk')}</span>`}
@@ -187,6 +200,12 @@ function openManageItemsSheet() {
   Sheet.open(t('manageItemsTitle'), manageItemsSheetHtml());
   wireManageItemsForm();
   loadManageItemsList();
+}
+
+function miSubmitButtonInner(mode) {
+  return mode === 'edit'
+    ? `${icon('checkCircle', 16)}<span>${t('saveChanges')}</span>`
+    : `${icon('plusCircle', 16)}<span>${t('addItem')}</span>`;
 }
 
 function manageItemsSheetHtml() {
@@ -228,8 +247,8 @@ function manageItemsSheetHtml() {
         </div>
       </div>
       <div class="card-row">
-        <button type="button" class="btn btn-ghost" id="mi-cancel-edit" hidden>${t('cancel')}</button>
-        <button type="submit" class="btn btn-primary btn-block" id="mi-submit">${t('addItem')}</button>
+        <button type="button" class="btn btn-ghost" id="mi-cancel-edit" hidden>${icon('xCircle', 16)}<span>${t('cancel')}</span></button>
+        <button type="submit" class="btn btn-primary btn-block" id="mi-submit">${miSubmitButtonInner('add')}</button>
       </div>
     </form>
 
@@ -247,7 +266,7 @@ function wireManageItemsForm() {
   document.getElementById('mi-cancel-edit').addEventListener('click', () => {
     miEditingId = null;
     form.reset();
-    document.getElementById('mi-submit').textContent = t('addItem');
+    document.getElementById('mi-submit').innerHTML = miSubmitButtonInner('add');
     document.getElementById('mi-cancel-edit').hidden = true;
   });
 }
@@ -278,7 +297,7 @@ async function onManageItemSubmit(e) {
     }
     miEditingId = null;
     e.target.reset();
-    document.getElementById('mi-submit').textContent = t('addItem');
+    document.getElementById('mi-submit').innerHTML = miSubmitButtonInner('add');
     document.getElementById('mi-cancel-edit').hidden = true;
     await loadManageItemsList();
     await refreshSkuCaches();
@@ -320,14 +339,17 @@ function miRowHtml(s) {
       <div class="card-row">
         <div>
           <div class="card-title">${escapeHtml(s.name)}</div>
-          <div class="card-meta mono">${escapeHtml(s.sku_code)} · ${escapeHtml(s.category)} · ${escapeHtml(s.base_uom)}</div>
+          <div class="card-meta mono">${escapeHtml(s.sku_code)} · ${escapeHtml(s.base_uom)}</div>
         </div>
       </div>
       <div class="card-row" style="margin-top:var(--s3)">
-        <button class="btn btn-outline btn-sm" data-mi-edit="${s.id}">${t('btnEdit')}</button>
+        <span class="chip chip-cat-${catClass(s.category)}">${icon(catIcon(s.category), 12)}${escapeHtml(s.category)}</span>
+      </div>
+      <div class="card-row" style="margin-top:var(--s3)">
+        <button class="btn btn-outline btn-sm" data-mi-edit="${s.id}">${icon('pencil', 14)}<span>${t('btnEdit')}</span></button>
         ${s.is_active
-          ? `<button class="btn btn-ghost btn-sm" data-mi-toggle="${s.id}" data-to-active="false">${t('btnDeactivate')}</button>`
-          : `<button class="btn btn-ghost btn-sm" data-mi-toggle="${s.id}" data-to-active="true">${t('btnActivate')}</button>`}
+          ? `<button class="btn btn-ghost btn-sm" data-mi-toggle="${s.id}" data-to-active="false">${icon('xCircle', 14)}<span>${t('btnDeactivate')}</span></button>`
+          : `<button class="btn btn-ghost btn-sm" data-mi-toggle="${s.id}" data-to-active="true">${icon('checkCircle', 14)}<span>${t('btnActivate')}</span></button>`}
       </div>
     </div>
   `;
@@ -344,7 +366,7 @@ function startEditSku(id) {
   document.getElementById('mi-alt-uom').value = sku.alt_uom || '';
   document.getElementById('mi-conversion-factor').value = sku.conversion_factor ?? '';
   document.getElementById('mi-min-threshold').value = sku.min_threshold;
-  document.getElementById('mi-submit').textContent = t('saveChanges');
+  document.getElementById('mi-submit').innerHTML = miSubmitButtonInner('edit');
   document.getElementById('mi-cancel-edit').hidden = false;
   document.getElementById('sheet-body').scrollTop = 0;
 }
@@ -393,7 +415,8 @@ document.getElementById('form-receive').addEventListener('submit', async (e) => 
   const receivedBy = document.getElementById('rc-by').value.trim();
 
   const btn = e.target.querySelector('button[type="submit"]');
-  btn.disabled = true; btn.textContent = t('btnGenerating');
+  const label = document.getElementById('rc-submit-label');
+  btn.disabled = true; label.textContent = t('btnGenerating');
   try {
     const lot = await DB.receiveStock({ skuId, qty, uom, receivedBy, supplierRef });
     const sku = activeSkus.find((s) => s.id === skuId);
@@ -404,7 +427,7 @@ document.getElementById('form-receive').addEventListener('submit', async (e) => 
   } catch (err) {
     errEl.innerHTML = `<div class="form-error">${escapeHtml(err.message || 'Could not receive stock')}</div>`;
   } finally {
-    btn.disabled = false; btn.textContent = t('btnGenerateLot');
+    btn.disabled = false; label.textContent = t('btnGenerateLot');
   }
 });
 
@@ -414,7 +437,7 @@ function renderReceiveResult(lot, sku) {
     <div class="card">
       <div class="eyebrow">${t('stickerReady')}</div>
       ${QR.stickerHtml({ lotCode: lot.lot_code, skuCode: sku.sku_code, skuName: sku.name, receiveDate: fmtDate(lot.receive_date) })}
-      <button class="btn btn-outline btn-block" style="margin-top:var(--s4)" id="btn-print-sticker">${t('btnPrintSticker')}</button>
+      <button class="btn btn-outline btn-block" style="margin-top:var(--s4)" id="btn-print-sticker">${icon('printer', 16)}<span>${t('btnPrintSticker')}</span></button>
     </div>`;
   QR.renderInto(document.getElementById(`sticker-qr-${lot.lot_code}`), lot.lot_code, 120);
   document.getElementById('btn-print-sticker').addEventListener('click', () => window.print());
@@ -472,7 +495,7 @@ function renderIssueStep(lot, openRequests) {
       <div class="card-title">${escapeHtml(lot.name)}</div>
       <div class="card-meta mono">${escapeHtml(lot.lot_code)} · ${escapeHtml(lot.sku_code)}</div>
       <div class="card-row" style="margin-top:var(--s3)">
-        <span class="chip chip-cat-${catClass(lot.category)}">${escapeHtml(lot.category)}</span>
+        <span class="chip chip-cat-${catClass(lot.category)}">${icon(catIcon(lot.category), 12)}${escapeHtml(lot.category)}</span>
         <span class="stat-figure" style="font-size:var(--t-card)">${t('unitLeft', fmtQty(lot.balance), escapeHtml(lot.uom))}</span>
       </div>
     </div>
@@ -494,12 +517,12 @@ function renderIssueStep(lot, openRequests) {
         <input type="text" id="issue-picked-up-by" placeholder="${escapeHtml(t('fieldReceivedByPh'))}">
       </div>
       <div id="issue-error"></div>
-      <button class="btn btn-primary btn-block" id="btn-confirm-issue">${t('btnConfirmIssue')}</button>
-      <button class="btn btn-ghost btn-block" id="btn-scan-again" style="margin-top:var(--s2)">${t('btnScanDifferent')}</button>
+      <button class="btn btn-primary btn-block" id="btn-confirm-issue">${icon('check', 16)}<span id="issue-confirm-label">${t('btnConfirmIssue')}</span></button>
+      <button class="btn btn-ghost btn-block" id="btn-scan-again" style="margin-top:var(--s2)">${icon('repeat', 16)}<span>${t('btnScanDifferent')}</span></button>
     ` : `
       <div class="empty" style="margin-top:var(--s5)">
         <p>${t('emptyNoOpenRequest')}</p>
-        <button class="btn btn-outline" id="btn-scan-again">${t('btnScanDifferent')}</button>
+        <button class="btn btn-outline" id="btn-scan-again">${icon('repeat', 16)}<span>${t('btnScanDifferent')}</span></button>
       </div>
     `}
   `;
@@ -532,7 +555,8 @@ function renderIssueStep(lot, openRequests) {
     }
 
     const btn = document.getElementById('btn-confirm-issue');
-    btn.disabled = true; btn.textContent = t('btnConfirming');
+    const label = document.getElementById('issue-confirm-label');
+    btn.disabled = true; label.textContent = t('btnConfirming');
     try {
       const result = await DB.issueStock({ lotId: lot.lot_id, requestId, actualQty, performedBy });
       if (result.has_discrepancy) {
@@ -543,7 +567,7 @@ function renderIssueStep(lot, openRequests) {
       resetScanView();
     } catch (err) {
       errEl.innerHTML = `<div class="form-error">${escapeHtml(err.message || 'Could not confirm issue')}</div>`;
-      btn.disabled = false; btn.textContent = t('btnConfirmIssue');
+      btn.disabled = false; label.textContent = t('btnConfirmIssue');
     }
   });
 }
@@ -553,58 +577,83 @@ function renderIssueStep(lot, openRequests) {
 // ============================================================================
 const REQUEST_STATUSES = ['all', 'pending', 'preparing', 'ready', 'fulfilled'];
 let requestStatus = 'all';
+let requestSearch = '';
+let requestRows = [];
 
 function renderRequestTabs() {
   const el = document.getElementById('request-status-tabs');
-  el.innerHTML = REQUEST_STATUSES.map((s) => `<button data-status="${s}" aria-pressed="${s === requestStatus}">${statusLabel(s)}</button>`).join('');
+  el.innerHTML = REQUEST_STATUSES.map((s) => `<button data-status="${s}" aria-pressed="${s === requestStatus}">${icon(STATUS_ICONS[s] || 'list', 15)}<span>${statusLabel(s)}</span></button>`).join('');
   el.querySelectorAll('button').forEach((b) => {
     b.addEventListener('click', () => { requestStatus = b.dataset.status; renderRequestTabs(); loadRequests(); });
   });
 }
 renderRequestTabs();
 
+document.getElementById('request-search').addEventListener('input', (e) => {
+  requestSearch = e.target.value;
+  renderRequestsList();
+});
+
 async function loadRequests() {
   const list = document.getElementById('requests-list');
   list.innerHTML = skeletonCards(3);
   try {
-    const rows = await DB.listRequests({ status: requestStatus === 'all' ? null : requestStatus });
-    if (!rows.length) {
-      list.innerHTML = `<div class="empty"><p>${t('emptyRequests', requestStatus === 'all' ? '' : statusLabel(requestStatus) + ' ')}</p>
-        <button class="btn btn-primary btn-sm" id="empty-new-request">${t('btnNewRequest')}</button></div>`;
-      document.getElementById('empty-new-request')?.addEventListener('click', openNewRequestSheet);
-      return;
-    }
-    list.innerHTML = rows.map((r) => `
-      <div class="card">
-        <div class="card-row">
-          <div>
-            <div class="card-title">${escapeHtml(r.skus?.name || 'Unknown item')}</div>
-            <div class="card-meta">${escapeHtml(r.requester_name)} · ${fmtQty(r.qty_requested)} ${escapeHtml(r.skus?.base_uom || '')}</div>
-          </div>
-          <span class="chip ${statusChipClass(r.status)}">${statusLabel(r.status)}</span>
-        </div>
-        <div class="card-row" style="margin-top:var(--s3)">
-          <span class="card-meta mono">${escapeHtml(r.request_code)} · ${t('neededBy', fmtDate(r.needed_by))}</span>
-          ${nextStatusButton(r)}
-        </div>
-        ${r.status === 'fulfilled' && r.picked_up_by ? `<div class="card-meta" style="margin-top:var(--s2)">${escapeHtml(t('pickedUpBy', r.picked_up_by))}</div>` : ''}
-      </div>
-    `).join('');
-    list.querySelectorAll('[data-advance]').forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        try {
-          await DB.setRequestStatus(btn.dataset.advance, btn.dataset.to);
-          toast(t('toastStatusUpdated', statusLabel(btn.dataset.to)), 'success');
-          loadRequests();
-        } catch (err) {
-          toast(err.message || 'Could not update request', 'error');
-        }
-      });
-    });
+    requestRows = await DB.listRequests({ status: requestStatus === 'all' ? null : requestStatus });
+    renderRequestsList();
   } catch (err) {
     list.innerHTML = '';
     toast(err.message || 'Could not load requests', 'error');
   }
+}
+
+function renderRequestsList() {
+  const list = document.getElementById('requests-list');
+  const q = requestSearch.trim().toLowerCase();
+  const rows = q ? requestRows.filter((r) =>
+    (r.requester_name || '').toLowerCase().includes(q) ||
+    (r.picked_up_by || '').toLowerCase().includes(q) ||
+    (r.request_code || '').toLowerCase().includes(q) ||
+    (r.skus?.name || '').toLowerCase().includes(q) ||
+    (r.skus?.sku_code || '').toLowerCase().includes(q)
+  ) : requestRows;
+
+  if (!rows.length) {
+    if (q) {
+      list.innerHTML = `<div class="empty"><p>${t('emptySearchResults', escapeHtml(requestSearch.trim()))}</p></div>`;
+      return;
+    }
+    list.innerHTML = `<div class="empty"><p>${t('emptyRequests', requestStatus === 'all' ? '' : statusLabel(requestStatus) + ' ')}</p>
+      <button class="btn btn-primary btn-sm" id="empty-new-request">${icon('plusCircle', 14)}<span>${t('btnNewRequest')}</span></button></div>`;
+    document.getElementById('empty-new-request')?.addEventListener('click', openNewRequestSheet);
+    return;
+  }
+  list.innerHTML = rows.map((r) => `
+    <div class="card">
+      <div class="card-row">
+        <div>
+          <div class="card-title">${escapeHtml(r.skus?.name || 'Unknown item')}</div>
+          <div class="card-meta">${escapeHtml(r.requester_name)} · ${fmtQty(r.qty_requested)} ${escapeHtml(r.skus?.base_uom || '')}</div>
+        </div>
+        <span class="chip ${statusChipClass(r.status)}">${statusLabel(r.status)}</span>
+      </div>
+      <div class="card-row" style="margin-top:var(--s3)">
+        <span class="card-meta mono">${escapeHtml(r.request_code)} · ${t('neededBy', fmtDate(r.needed_by))}</span>
+        ${nextStatusButton(r)}
+      </div>
+      ${r.status === 'fulfilled' && r.picked_up_by ? `<div class="card-meta" style="margin-top:var(--s2)">${escapeHtml(t('pickedUpBy', r.picked_up_by))}</div>` : ''}
+    </div>
+  `).join('');
+  list.querySelectorAll('[data-advance]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      try {
+        await DB.setRequestStatus(btn.dataset.advance, btn.dataset.to);
+        toast(t('toastStatusUpdated', statusLabel(btn.dataset.to)), 'success');
+        loadRequests();
+      } catch (err) {
+        toast(err.message || 'Could not update request', 'error');
+      }
+    });
+  });
 }
 
 function statusChipClass(status) {
@@ -615,7 +664,7 @@ function statusChipClass(status) {
 function nextStatusButton(r) {
   const next = { pending: 'preparing', preparing: 'ready' }[r.status];
   if (!next) return '';
-  return `<button class="btn btn-outline btn-sm" data-advance="${r.id}" data-to="${next}">${t('btnMarkStatus', statusLabel(next))}</button>`;
+  return `<button class="btn btn-outline btn-sm" data-advance="${r.id}" data-to="${next}">${icon('arrowRight', 14)}<span>${t('btnMarkStatus', statusLabel(next))}</span></button>`;
 }
 
 document.getElementById('btn-new-request').addEventListener('click', openNewRequestSheet);
@@ -646,7 +695,7 @@ function openNewRequestSheet() {
         <label for="nr-notes">${t('fieldNotesOptional')}</label>
         <textarea id="nr-notes"></textarea>
       </div>
-      <button class="btn btn-primary btn-block" type="submit">${t('btnSubmitRequest')}</button>
+      <button class="btn btn-primary btn-block" type="submit">${icon('send', 16)}<span>${t('btnSubmitRequest')}</span></button>
     </form>
   `);
   document.getElementById('form-new-request').addEventListener('submit', async (e) => {
@@ -678,6 +727,8 @@ function activeSkusOptionsCache() {
 // REPORTS
 // ============================================================================
 let currentReport = 'stock';
+let reportSearch = '';
+let reportRawRows = [];
 
 document.querySelectorAll('#report-tabs button').forEach((b) => {
   b.addEventListener('click', () => {
@@ -687,46 +738,77 @@ document.querySelectorAll('#report-tabs button').forEach((b) => {
   });
 });
 
+document.getElementById('report-search').addEventListener('input', (e) => {
+  reportSearch = e.target.value;
+  renderReportTable(currentReport);
+});
+
+function reportSearchFields(kind) {
+  return {
+    stock: ['sku_code', 'name', 'category'],
+    movement: ['sku_code', 'sku_name', 'lot_code', 'performed_by', 'request_code', 'type'],
+    discrepancy: ['request_code', 'requester_name', 'sku_code', 'sku_name', 'lot_code'],
+    lowstock: ['sku_code', 'name', 'category'],
+  }[kind] || [];
+}
+
 async function loadReport(kind) {
   const body = document.getElementById('report-body');
   body.innerHTML = `<div class="card"><div class="skeleton" style="height:160px"></div></div>`;
   try {
-    if (kind === 'stock') {
-      const rows = await DB.stockBySku();
-      body.innerHTML = tableHtml(
-        [t('colSku'), t('colName'), t('colCategory'), t('colOnHand'), t('colThreshold'), t('colStatus')],
-        rows.map((r) => [r.sku_code, r.name, r.category,
-          `<span class="num">${fmtQty(r.on_hand)} ${r.base_uom}</span>`,
-          `<span class="num">${fmtQty(r.min_threshold)}</span>`,
-          r.is_low ? `<span class="chip chip-low">${t('rowLow')}</span>` : `<span class="chip chip-ok">${t('chipOk')}</span>`]),
-      );
-    } else if (kind === 'movement') {
-      const rows = await DB.movementHistory();
-      body.innerHTML = tableHtml(
-        [t('colWhen'), t('colType'), t('colSku'), t('colLot'), t('colQty'), t('colBy'), t('colRequest')],
-        rows.map((r) => [fmtDateTime(r.created_at), r.type, `${r.sku_code} — ${r.sku_name}`, r.lot_code,
-          `<span class="num">${fmtQty(r.qty)} ${r.uom}</span>`, r.performed_by || '—', r.request_code || '—']),
-      );
-    } else if (kind === 'discrepancy') {
-      const rows = await DB.discrepancyReport();
-      if (!rows.length) { body.innerHTML = `<div class="empty"><p>${t('emptyDiscrepancies')}</p></div>`; return; }
-      body.innerHTML = tableHtml(
-        [t('colWhen'), t('colRequest'), t('colSku'), t('colLot'), t('colRequested'), t('colActual'), t('colVariance')],
-        rows.map((r) => [fmtDateTime(r.created_at), `${r.request_code} (${r.requester_name})`, `${r.sku_code} — ${r.sku_name}`, r.lot_code,
-          `<span class="num">${fmtQty(r.requested_qty)}</span>`, `<span class="num">${fmtQty(r.actual_qty)}</span>`,
-          `<span class="num" style="color:var(--discrepancy)">${r.variance > 0 ? '+' : ''}${fmtQty(r.variance)}</span>`]),
-      );
-    } else if (kind === 'lowstock') {
-      const rows = await DB.lowStock();
-      if (!rows.length) { body.innerHTML = `<div class="empty"><p>${t('emptyLowStock')}</p></div>`; return; }
-      body.innerHTML = tableHtml(
-        [t('colSku'), t('colName'), t('colCategory'), t('colOnHand'), t('colThreshold')],
-        rows.map((r) => [r.sku_code, r.name, r.category, `<span class="num">${fmtQty(r.on_hand)} ${r.base_uom}</span>`, `<span class="num">${fmtQty(r.min_threshold)}</span>`]),
-      );
-    }
+    if (kind === 'stock') reportRawRows = await DB.stockBySku();
+    else if (kind === 'movement') reportRawRows = await DB.movementHistory();
+    else if (kind === 'discrepancy') reportRawRows = await DB.discrepancyReport();
+    else if (kind === 'lowstock') reportRawRows = await DB.lowStock();
+    renderReportTable(kind);
   } catch (err) {
     body.innerHTML = '';
     toast(err.message || 'Could not load report', 'error');
+  }
+}
+
+function renderReportTable(kind) {
+  const body = document.getElementById('report-body');
+  const allRows = reportRawRows;
+  const q = reportSearch.trim().toLowerCase();
+  const fields = reportSearchFields(kind);
+  const rows = q ? allRows.filter((r) => fields.some((f) => String(r[f] ?? '').toLowerCase().includes(q))) : allRows;
+
+  if (q && !rows.length) {
+    body.innerHTML = `<div class="empty"><p>${t('emptySearchResults', escapeHtml(reportSearch.trim()))}</p></div>`;
+    return;
+  }
+  if (!allRows.length) {
+    if (kind === 'discrepancy') { body.innerHTML = `<div class="empty"><p>${t('emptyDiscrepancies')}</p></div>`; return; }
+    if (kind === 'lowstock') { body.innerHTML = `<div class="empty"><p>${t('emptyLowStock')}</p></div>`; return; }
+  }
+
+  if (kind === 'stock') {
+    body.innerHTML = tableHtml(
+      [t('colSku'), t('colName'), t('colCategory'), t('colOnHand'), t('colThreshold'), t('colStatus')],
+      rows.map((r) => [r.sku_code, r.name, r.category,
+        `<span class="num">${fmtQty(r.on_hand)} ${r.base_uom}</span>`,
+        `<span class="num">${fmtQty(r.min_threshold)}</span>`,
+        r.is_low ? `<span class="chip chip-low">${t('rowLow')}</span>` : `<span class="chip chip-ok">${t('chipOk')}</span>`]),
+    );
+  } else if (kind === 'movement') {
+    body.innerHTML = tableHtml(
+      [t('colWhen'), t('colType'), t('colSku'), t('colLot'), t('colQty'), t('colBy'), t('colRequest')],
+      rows.map((r) => [fmtDateTime(r.created_at), r.type, `${r.sku_code} — ${r.sku_name}`, r.lot_code,
+        `<span class="num">${fmtQty(r.qty)} ${r.uom}</span>`, r.performed_by || '—', r.request_code || '—']),
+    );
+  } else if (kind === 'discrepancy') {
+    body.innerHTML = tableHtml(
+      [t('colWhen'), t('colRequest'), t('colSku'), t('colLot'), t('colRequested'), t('colActual'), t('colVariance')],
+      rows.map((r) => [fmtDateTime(r.created_at), `${r.request_code} (${r.requester_name})`, `${r.sku_code} — ${r.sku_name}`, r.lot_code,
+        `<span class="num">${fmtQty(r.requested_qty)}</span>`, `<span class="num">${fmtQty(r.actual_qty)}</span>`,
+        `<span class="num" style="color:var(--discrepancy)">${r.variance > 0 ? '+' : ''}${fmtQty(r.variance)}</span>`]),
+    );
+  } else if (kind === 'lowstock') {
+    body.innerHTML = tableHtml(
+      [t('colSku'), t('colName'), t('colCategory'), t('colOnHand'), t('colThreshold')],
+      rows.map((r) => [r.sku_code, r.name, r.category, `<span class="num">${fmtQty(r.on_hand)} ${r.base_uom}</span>`, `<span class="num">${fmtQty(r.min_threshold)}</span>`]),
+    );
   }
 }
 
@@ -742,6 +824,7 @@ function tableHtml(headers, rows) {
 (async function init() {
   document.documentElement.lang = I18n.current;
   I18n.applyStatic();
+  applyStaticIcons();
   try {
     activeSkus = await DB.listSkus({ activeOnly: true });
   } catch (_) { /* stock view will surface the error */ }

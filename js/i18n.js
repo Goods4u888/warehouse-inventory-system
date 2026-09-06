@@ -22,6 +22,10 @@ const I18N = {
     chipOk: 'OK',
     chipBelowThreshold: (min) => `Below threshold (${min})`,
     emptyStockCategory: 'No SKUs in this category yet.',
+    searchStockPlaceholder: 'Search by SKU or name',
+    searchRequestsPlaceholder: 'Search requester, item, or code',
+    searchReportsPlaceholder: 'Search this report',
+    emptySearchResults: (q) => `No results for "${q}".`,
 
     receiveTitle: 'Receive stock',
     receiveHint: "Log a new batch in. The system will generate a lot ID and QR sticker — print it and stick it on the batch.",
@@ -113,6 +117,10 @@ const I18N = {
     chipOk: 'ปกติ',
     chipBelowThreshold: (min) => `ต่ำกว่าเกณฑ์ (${min})`,
     emptyStockCategory: 'ยังไม่มีสินค้าในหมวดนี้',
+    searchStockPlaceholder: 'ค้นหาด้วยรหัส SKU หรือชื่อ',
+    searchRequestsPlaceholder: 'ค้นหาผู้ขอ, สินค้า หรือรหัสคำขอ',
+    searchReportsPlaceholder: 'ค้นหาในรายงานนี้',
+    emptySearchResults: (q) => `ไม่พบผลลัพธ์สำหรับ "${q}"`,
 
     receiveTitle: 'รับของเข้าคลัง',
     receiveHint: 'บันทึกของที่รับเข้าใหม่ ระบบจะสร้างรหัสล็อตและ QR สติกเกอร์ให้ — พิมพ์แล้วนำไปแปะที่ของ',

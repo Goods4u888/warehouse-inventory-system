@@ -21,8 +21,8 @@
       <div class="header-sub" id="header-sub" data-i18n="headerSub">รับของ · เบิกของ</div>
     </div>
     <div class="header-actions">
-      <button class="btn btn-ghost btn-sm" id="lang-toggle" aria-label="Switch language">EN</button>
-      <button class="btn btn-ghost btn-sm" id="btn-refresh" data-i18n="refresh" aria-label="Refresh">↻ Refresh</button>
+      <button class="btn btn-ghost btn-sm" id="lang-toggle" data-icon="globe" aria-label="Switch language"><span id="lang-toggle-label">EN</span></button>
+      <button class="btn btn-ghost btn-sm" id="btn-refresh" data-icon="refresh" aria-label="Refresh"><span data-i18n="refresh">Refresh</span></button>
     </div>
   </header>
 
@@ -43,7 +43,11 @@
 
       <div class="card-row" style="margin-bottom:var(--s4)">
         <span class="eyebrow" style="margin:0" data-i18n="materialsOnHand">Materials on hand</span>
-        <button class="btn btn-outline btn-sm" id="btn-manage-items" data-i18n="manageItems">Manage items</button>
+        <button class="btn btn-outline btn-sm" id="btn-manage-items" data-icon="sliders"><span data-i18n="manageItems">Manage items</span></button>
+      </div>
+
+      <div class="search-wrap" data-icon="search">
+        <input type="search" class="search-input" id="stock-search" data-i18n-placeholder="searchStockPlaceholder" placeholder="Search by SKU or name">
       </div>
 
       <div class="facets" id="stock-facets" role="group" aria-label="Filter by category"></div>
@@ -81,7 +85,7 @@
           <label for="rc-by" data-i18n="fieldReceivedBy">Received by</label>
           <input type="text" id="rc-by" data-i18n-placeholder="fieldReceivedByPh" placeholder="Staff name" required>
         </div>
-        <button class="btn btn-primary btn-block" type="submit" data-i18n="btnGenerateLot">Generate lot &amp; QR</button>
+        <button class="btn btn-primary btn-block" type="submit" id="btn-receive-submit" data-icon="qr"><span id="rc-submit-label" data-i18n="btnGenerateLot">Generate lot &amp; QR</span></button>
       </form>
 
       <div id="receive-result" style="margin-top:var(--s5)"></div>
@@ -102,7 +106,7 @@
           <label for="scan-manual" data-i18n="fieldLotCode">Lot code</label>
           <input type="text" id="scan-manual" placeholder="e.g. CEM-001-260906-001" autocapitalize="characters">
         </div>
-        <button class="btn btn-outline btn-block" id="btn-lookup-lot" data-i18n="btnLookupLot">Look up lot</button>
+        <button class="btn btn-outline btn-block" id="btn-lookup-lot" data-icon="search"><span data-i18n="btnLookupLot">Look up lot</span></button>
       </div>
 
       <div id="scan-step-issue" hidden></div>
@@ -112,7 +116,11 @@
     <section class="view" id="view-requests" hidden>
       <div class="section-head">
         <h2 data-i18n="requestsTitle">Requests</h2>
-        <button class="btn btn-primary btn-sm" id="btn-new-request" data-i18n="btnNewRequest">+ New</button>
+        <button class="btn btn-primary btn-sm" id="btn-new-request" data-icon="plusCircle" data-icon-size="14"><span data-i18n="btnNewRequest">+ New</span></button>
+      </div>
+
+      <div class="search-wrap" data-icon="search">
+        <input type="search" class="search-input" id="request-search" data-i18n-placeholder="searchRequestsPlaceholder" placeholder="Search requester, item, or code">
       </div>
 
       <div class="segmented" id="request-status-tabs" role="tablist"></div>
@@ -124,11 +132,15 @@
     <section class="view" id="view-reports" hidden>
       <div class="section-head"><h2 data-i18n="reportsTitle">Reports</h2></div>
 
+      <div class="search-wrap" data-icon="search">
+        <input type="search" class="search-input" id="report-search" data-i18n-placeholder="searchReportsPlaceholder" placeholder="Search this report">
+      </div>
+
       <div class="segmented" id="report-tabs" role="tablist">
-        <button data-report="stock" aria-pressed="true" data-i18n="reportStock">Stock</button>
-        <button data-report="movement" aria-pressed="false" data-i18n="reportMovement">Movement</button>
-        <button data-report="discrepancy" aria-pressed="false" data-i18n="reportDiscrepancy">Discrepancies</button>
-        <button data-report="lowstock" aria-pressed="false" data-i18n="reportLowStock">Low stock</button>
+        <button data-report="stock" aria-pressed="true" data-icon="barChart"><span data-i18n="reportStock">Stock</span></button>
+        <button data-report="movement" aria-pressed="false" data-icon="swap"><span data-i18n="reportMovement">Movement</span></button>
+        <button data-report="discrepancy" aria-pressed="false" data-icon="alertTriangle"><span data-i18n="reportDiscrepancy">Discrepancies</span></button>
+        <button data-report="lowstock" aria-pressed="false" data-icon="trendingDown"><span data-i18n="reportLowStock">Low stock</span></button>
       </div>
 
       <div id="report-body"></div>
@@ -183,6 +195,7 @@
 <script src="js/db.js"></script>
 <script src="js/qr.js"></script>
 <script src="js/i18n.js"></script>
+<script src="js/icons.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

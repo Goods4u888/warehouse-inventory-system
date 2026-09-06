@@ -134,10 +134,27 @@ main {
 
 .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
 
+/* ---- Search --------------------------------------------------------------------- */
+.search-wrap { position: relative; margin-bottom: var(--s3); }
+.search-wrap > svg.icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--ink-3); pointer-events: none; }
+.search-input {
+  display: block; width: 100%; border: 1px solid var(--line-mid); border-radius: var(--r-control);
+  padding: 10px var(--s3) 10px 36px; font-size: var(--t-meta); font-family: inherit;
+  background: var(--paper); color: var(--ink); margin-bottom: 0;
+}
+.search-input::placeholder { color: var(--ink-3); }
+.search-input:focus {
+  outline: none; border-color: var(--ink-3); box-shadow: 0 0 0 3px var(--signal-wash);
+}
+
+/* ---- Icons inside buttons/chips --------------------------------------------------- */
+.btn svg.icon, .facet svg.icon, .chip svg.icon { flex: none; }
+
 /* ---- Facets / segmented control ----------------------------------------------- */
 .facets { display: flex; gap: var(--s2); overflow-x: auto; padding-bottom: var(--s1); margin-bottom: var(--s4); }
 .facets::-webkit-scrollbar { display: none; }
 .facet {
+  display: inline-flex; align-items: center; gap: 5px;
   flex: none; border-radius: var(--r-commit); border: 1px solid var(--line-mid);
   padding: 7px 14px; font-size: var(--t-micro); font-weight: 600; color: var(--ink-2);
   background: var(--paper); cursor: pointer; touch-action: manipulation;
@@ -150,8 +167,9 @@ main {
   margin-bottom: var(--s4);
 }
 .segmented button {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
   border: none; background: transparent; border-radius: calc(var(--r-control) - 3px);
-  padding: 8px 6px; font-size: var(--t-micro); font-weight: 600; color: var(--ink-2);
+  padding: 8px 4px; font-size: var(--t-micro); font-weight: 600; color: var(--ink-2);
   cursor: pointer;
 }
 .segmented button[aria-pressed="true"] { background: var(--paper); color: var(--ink); box-shadow: var(--lift-1); }

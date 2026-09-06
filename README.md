@@ -45,8 +45,9 @@ tablet.
 ## What's in v1
 
 - **Stock** — current on-hand quantity per SKU (summed across all lots),
-  filterable by category, with a low-stock flag driven by each SKU's
-  threshold. A "Manage items" button opens full CRUD on the item master:
+  filterable by category and searchable by SKU code or name, with a
+  low-stock flag driven by each SKU's threshold. A "Manage items" button
+  opens full CRUD on the item master:
   add a SKU, edit any field, deactivate (soft-delete — history is kept) or
   reactivate one. Deactivated items drop out of Receive and New Request
   pickers but stay visible, separately listed, in Manage items.
@@ -69,14 +70,21 @@ tablet.
   and move it through pending → preparing → ready → fulfilled. A fulfilled
   request shows both who asked for it (`requester_name`) and who actually
   picked it up (`picked_up_by`, captured at the Scan step) — they're often
-  different people, and now the system keeps both.
-- **Reports** — Stock, Movement history, Discrepancies, Low stock.
+  different people, and now the system keeps both. Searchable by requester,
+  picker, item, or request code.
+- **Reports** — Stock, Movement history, Discrepancies, Low stock — each
+  searchable across its columns (SKU, name, lot code, who performed it, etc).
 - **Thai / English** — every screen switches with the toggle next to Refresh
   (top right); the choice is remembered per browser. Thai is the default
   language, since day-to-day warehouse staff are the primary users.
 - **Phone, tablet, and wider** — one responsive layout throughout: a single
   column on a phone, and from tablet width up the stock/requests/manage-items
   lists switch to a 2- or 3-column grid so the extra width isn't wasted.
+- **Icons throughout** — every action button, the report and request-status
+  tabs, and each material category chip (Cement, Steel, Aggregate, Pipe &
+  Fittings, Hardware) carries a small hand-drawn line icon, in the same
+  no-fill/currentColor style as the bottom tab bar. All inline SVG defined in
+  `js/icons.js` — no icon font, no external request.
 
 ## Scope decisions worth knowing about
 
@@ -110,6 +118,7 @@ js/config.js         Supabase URL + anon key
 js/db.js             every Supabase call the app makes
 js/qr.js             QR generation (sticker) + camera scanning
 js/i18n.js           Thai/English dictionary, t() lookup, language switching
+js/icons.js          shared inline-SVG icon set (icon(name), catIcon(category))
 js/app.js            view router and UI wiring
 supabase/schema.sql  tables, views, RPCs, RLS policies, seed data
 ```
