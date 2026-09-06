@@ -40,6 +40,11 @@
   --cat-steel:     #33525C;  --cat-steel-wash:     #E6EDEE;  --cat-steel-beacon:     #5F8B98;
   --cat-aggregate: #7C6A45;  --cat-aggregate-wash: #F1EBDC;  --cat-aggregate-beacon: #B39D66;
   --cat-hardware:  #6B4630;  --cat-hardware-wash:  #F1E5DC;  --cat-hardware-beacon:  #A9765A;
+  --cat-electrical:#8A6D1D;  --cat-electrical-wash:#F3EDD4;  --cat-electrical-beacon:#C9A227;
+  --cat-sanitary:  #2F6B6E;  --cat-sanitary-wash:  #E3EEEE;  --cat-sanitary-beacon:  #4F9DA0;
+  --cat-paint:     #6B4368;  --cat-paint-wash:     #F0E3EF;  --cat-paint-beacon:     #9C6B98;
+  --cat-lumber:    #8B5E34;  --cat-lumber-wash:    #F1E6D8;  --cat-lumber-beacon:    #B98A54;
+  --cat-cleaning:  #2E7A6B;  --cat-cleaning-wash:  #E1F0EC;  --cat-cleaning-beacon:  #4FA695;
   --cat-other:     #5A5F58;  --cat-other-wash:     #EAEAE6;  --cat-other-beacon:     #8B9086;
 
   /* elevation: ring + shadow, crisp on this ground */
@@ -112,6 +117,11 @@
     --cat-steel:     #7FAFBC;  --cat-steel-wash:     #1C2529;  --cat-steel-beacon:     #4C7883;
     --cat-aggregate: #C7AD73;  --cat-aggregate-wash: #292317;  --cat-aggregate-beacon: #9C8352;
     --cat-hardware:  #C08A6A;  --cat-hardware-wash:  #2A211B;  --cat-hardware-beacon:  #8E5F44;
+    --cat-electrical:#D9BE6E;  --cat-electrical-wash:#2B2415;  --cat-electrical-beacon:#A8863A;
+    --cat-sanitary:  #7FB3B5;  --cat-sanitary-wash:  #1C2626;  --cat-sanitary-beacon:  #3E7A7C;
+    --cat-paint:     #B58FB2;  --cat-paint-wash:     #271F26;  --cat-paint-beacon:     #7A4F76;
+    --cat-lumber:    #C7A06D;  --cat-lumber-wash:    #2A2115;  --cat-lumber-beacon:    #8F6A3E;
+    --cat-cleaning:  #7FC2B0;  --cat-cleaning-wash:  #1B2622;  --cat-cleaning-beacon:  #3E8874;
     --cat-other:     #A2A79A;  --cat-other-wash:     #24261F;  --cat-other-beacon:     #6E7367;
 
     --lift-1: 0 0 0 1px rgba(0,0,0,.35), 0 1px 2px rgba(0,0,0,.3);

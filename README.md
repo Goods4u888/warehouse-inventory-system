@@ -23,12 +23,22 @@ tablet.
    populated tables). If you ran an earlier version of this schema, re-running
    the current file picks up the newer lot-numbering scheme and the
    `picked_up_by` column on `requests` without losing anything.
-2. **Credentials are already wired up** in `js/config.js` (your project URL
+2. **(Optional) Load the demo catalog.** `supabase/seed_mockup_100.sql` adds
+   ~100 more realistic Thai-named items — construction materials plus
+   hotel-facilities stock (electrical, sanitary ware, paint, lumber, cleaning
+   supplies) — across ten categories, so Stock/search/reports have enough
+   variety to demo properly. Run it in the SQL Editor the same way, any time
+   after `schema.sql`; its `sku_code`s (CMT-/STL-/AGG-/PVC-/HDW-/ELE-/SAN-/
+   PNT-/LUM-/CLN-) are chosen to never collide with `schema.sql`'s own 5-item
+   seed, and re-running it is a no-op. Delete rows you don't want from the
+   Supabase table editor, or skip this file entirely for a clean start — it's
+   optional. (Regenerate or edit the list from `scripts/gen_mockup_seed.py`.)
+3. **Credentials are already wired up** in `js/config.js` (your project URL
    and anon/publishable key). If you ever rotate the anon key, update it
    there — never put the `service_role` key in this file, it bypasses Row
    Level Security entirely and this file ships to every browser that loads
    the app.
-3. **Open the app.** Double-clicking `index.html` works for a first look, but
+4. **Open the app.** Double-clicking `index.html` works for a first look, but
    the camera scanner needs a "secure context" (HTTPS or `localhost`), so for
    real use serve it locally instead:
    ```
@@ -81,10 +91,14 @@ tablet.
   column on a phone, and from tablet width up the stock/requests/manage-items
   lists switch to a 2- or 3-column grid so the extra width isn't wasted.
 - **Icons throughout** — every action button, the report and request-status
-  tabs, and each material category chip (Cement, Steel, Aggregate, Pipe &
-  Fittings, Hardware) carries a small hand-drawn line icon, in the same
-  no-fill/currentColor style as the bottom tab bar. All inline SVG defined in
-  `js/icons.js` — no icon font, no external request.
+  tabs, and each material category chip carries a small hand-drawn line icon,
+  in the same no-fill/currentColor style as the bottom tab bar. All inline
+  SVG defined in `js/icons.js` — no icon font, no external request.
+- **Ten material categories**, each with its own colour + icon: Cement,
+  Steel, Aggregate, Pipe & Fittings, Hardware, Electrical, Sanitary Ware,
+  Paint, Lumber, and Cleaning Supplies — the last five added to cover
+  hotel-facilities stock alongside pure construction materials. New
+  categories fall back to a generic grey "Other" chip automatically.
 
 ## Scope decisions worth knowing about
 
@@ -111,14 +125,16 @@ tablet.
 ## Files
 
 ```
-index.html          the whole app shell (5 tabs + a bottom sheet for forms)
-css/tokens.css       design tokens — colour, type, spacing (nothing raw in app.css)
-css/app.css          components
-js/config.js         Supabase URL + anon key
-js/db.js             every Supabase call the app makes
-js/qr.js             QR generation (sticker) + camera scanning
-js/i18n.js           Thai/English dictionary, t() lookup, language switching
-js/icons.js          shared inline-SVG icon set (icon(name), catIcon(category))
-js/app.js            view router and UI wiring
-supabase/schema.sql  tables, views, RPCs, RLS policies, seed data
+index.html                     the whole app shell (5 tabs + a bottom sheet for forms)
+css/tokens.css                 design tokens — colour, type, spacing (nothing raw in app.css)
+css/app.css                    components
+js/config.js                   Supabase URL + anon key
+js/db.js                       every Supabase call the app makes
+js/qr.js                       QR generation (sticker) + camera scanning
+js/i18n.js                     Thai/English dictionary, t() lookup, language switching
+js/icons.js                    shared inline-SVG icon set (icon(name), catIcon(category))
+js/app.js                      view router and UI wiring
+supabase/schema.sql            tables, views, RPCs, RLS policies, 5-item seed
+supabase/seed_mockup_100.sql   optional ~100-item Thai demo catalog (see Setup step 2)
+scripts/gen_mockup_seed.py     regenerates seed_mockup_100.sql from an editable Python list
 ```

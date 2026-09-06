@@ -27,8 +27,18 @@ const DB = {
     return data;
   },
 
-  async createSku(sku) {
-    const { data, error } = await supabaseClient.from('skus').insert(sku).select().single();
+  // sku_code is assigned by the system (random 3-letter prefix + running
+  // number, e.g. "QZT-001") — create_sku() generates it server-side, so it's
+  // never part of the payload the caller sends here.
+  async createSku({ name, category, base_uom, alt_uom, conversion_factor, min_threshold }) {
+    const { data, error } = await supabaseClient.rpc('create_sku', {
+      p_name: name,
+      p_category: category,
+      p_base_uom: base_uom,
+      p_alt_uom: alt_uom || null,
+      p_conversion_factor: conversion_factor ?? null,
+      p_min_threshold: min_threshold ?? 0,
+    });
     if (error) throw error;
     return data;
   },
@@ -41,6 +51,19 @@ const DB = {
 
   async setSkuActive(id, isActive) {
     return DB.updateSku(id, { is_active: isActive });
+  },
+
+  // ---- Categories -----------------------------------------------------------
+  async listCategories() {
+    const { data, error } = await supabaseClient.from('categories').select('*').order('sort_order').order('name');
+    if (error) throw error;
+    return data;
+  },
+
+  async createCategory(name) {
+    const { data, error } = await supabaseClient.from('categories').insert({ name }).select().single();
+    if (error) throw error;
+    return data;
   },
 
   // ---- Stock (views) -------------------------------------------------------

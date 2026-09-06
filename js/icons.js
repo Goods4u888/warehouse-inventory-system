@@ -42,6 +42,11 @@ const ICON_PATHS = {
   pipe: '<rect x="3" y="9" width="18" height="6" rx="3"/><line x1="7.5" y1="9" x2="7.5" y2="15"/><line x1="16.5" y1="9" x2="16.5" y2="15"/>',
   wrench: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
   box: '<rect x="4" y="4" width="16" height="16" rx="2"/>',
+  zap: '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
+  droplet: '<path d="M12 2.69 17.66 8.35a8 8 0 1 1-11.31 0z"/>',
+  roller: '<rect x="3" y="4" width="14" height="6" rx="1.5"/><line x1="7" y1="10" x2="7" y2="14"/><rect x="5" y="14" width="4" height="6" rx="1"/>',
+  planks: '<rect x="3" y="5" width="18" height="3.2" rx="1"/><rect x="3" y="10.4" width="18" height="3.2" rx="1"/><rect x="3" y="15.8" width="18" height="3.2" rx="1"/>',
+  sparkle: '<path d="M12 3v4M12 17v4M5 5.5l2.8 2.8M16.2 15.7l2.8 2.8M3 12h4M17 12h4M5 18.5l2.8-2.8M16.2 8.3l2.8-2.8"/>',
 };
 
 function icon(name, size = 16) {
@@ -54,6 +59,8 @@ function icon(name, size = 16) {
 const CAT_ICONS = {
   Cement: 'bag', Steel: 'rebar', Aggregate: 'pile',
   'Pipe & Fittings': 'pipe', Hardware: 'wrench',
+  Electrical: 'zap', 'Sanitary Ware': 'droplet', Paint: 'roller',
+  Lumber: 'planks', 'Cleaning Supplies': 'sparkle',
 };
 function catIcon(category) {
   return CAT_ICONS[category] || 'box';

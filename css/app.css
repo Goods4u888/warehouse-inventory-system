@@ -4,6 +4,10 @@
    ========================================================================= */
 
 * { box-sizing: border-box; }
+/* The `hidden` attribute must always win over a component's own `display`
+   rule (e.g. `.btn { display: inline-flex }`) — otherwise toggling
+   `el.hidden` in JS silently does nothing for anything styled that way. */
+[hidden] { display: none !important; }
 html { scroll-behavior: smooth; }
 body {
   margin: 0;
@@ -121,11 +125,16 @@ main {
   font-size: var(--t-micro); font-weight: 600;
   white-space: nowrap;
 }
-.chip-cat-cement    { background: var(--cat-cement-wash);    color: var(--cat-cement); }
-.chip-cat-steel     { background: var(--cat-steel-wash);     color: var(--cat-steel); }
-.chip-cat-aggregate { background: var(--cat-aggregate-wash); color: var(--cat-aggregate); }
-.chip-cat-hardware  { background: var(--cat-hardware-wash);  color: var(--cat-hardware); }
-.chip-cat-other     { background: var(--cat-other-wash);     color: var(--cat-other); }
+.chip-cat-cement     { background: var(--cat-cement-wash);     color: var(--cat-cement); }
+.chip-cat-steel      { background: var(--cat-steel-wash);      color: var(--cat-steel); }
+.chip-cat-aggregate  { background: var(--cat-aggregate-wash);  color: var(--cat-aggregate); }
+.chip-cat-hardware   { background: var(--cat-hardware-wash);   color: var(--cat-hardware); }
+.chip-cat-electrical { background: var(--cat-electrical-wash); color: var(--cat-electrical); }
+.chip-cat-sanitary   { background: var(--cat-sanitary-wash);   color: var(--cat-sanitary); }
+.chip-cat-paint      { background: var(--cat-paint-wash);      color: var(--cat-paint); }
+.chip-cat-lumber     { background: var(--cat-lumber-wash);     color: var(--cat-lumber); }
+.chip-cat-cleaning   { background: var(--cat-cleaning-wash);   color: var(--cat-cleaning); }
+.chip-cat-other      { background: var(--cat-other-wash);      color: var(--cat-other); }
 
 .chip-ok  { background: var(--ok-wash); color: var(--ok); }
 .chip-low { background: var(--low-wash); color: var(--low); }
@@ -207,6 +216,20 @@ main {
   outline: none; border-color: var(--ink-3); box-shadow: 0 0 0 3px var(--signal-wash);
 }
 .field-hint { font-size: var(--t-micro); color: var(--ink-3); margin-top: var(--s1); }
+.field input:disabled { background: var(--paper-2); color: var(--ink-3); cursor: not-allowed; }
+
+.field-with-btn { display: flex; gap: var(--s2); align-items: stretch; }
+.field-with-btn select { flex: 1; min-width: 0; }
+.btn-icon-add {
+  display: inline-flex; align-items: center; justify-content: center;
+  flex: none; width: 44px;
+  border: 1px solid var(--line-strong); border-radius: var(--r-control);
+  background: transparent; color: var(--ink); cursor: pointer; touch-action: manipulation;
+}
+.btn-icon-add:hover { background: var(--paper-2); }
+
+.new-category-row { display: flex; gap: var(--s2); align-items: center; margin-top: var(--s2); }
+.new-category-row input { flex: 1; min-width: 0; margin: 0; }
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3); }
 
 .form-error {

@@ -6,6 +6,8 @@
 const CATS = {
   Cement: 'cement', Steel: 'steel', Aggregate: 'aggregate',
   'Pipe & Fittings': 'hardware', Hardware: 'hardware',
+  Electrical: 'electrical', 'Sanitary Ware': 'sanitary', Paint: 'paint',
+  Lumber: 'lumber', 'Cleaning Supplies': 'cleaning',
 };
 function catClass(category) {
   return CATS[category] || 'other';
@@ -186,6 +188,7 @@ function skeletonCards(n) {
 // ============================================================================
 let miAllSkus = [];
 let miEditingId = null;
+let miCategories = [];
 
 document.getElementById('btn-manage-items').addEventListener('click', openManageItemsSheet);
 
@@ -199,7 +202,27 @@ async function refreshSkuCaches() {
 function openManageItemsSheet() {
   Sheet.open(t('manageItemsTitle'), manageItemsSheetHtml());
   wireManageItemsForm();
+  loadManageItemsCategories();
   loadManageItemsList();
+}
+
+async function loadManageItemsCategories() {
+  try {
+    miCategories = await DB.listCategories();
+    renderCategoryOptions();
+  } catch (err) {
+    toast(err.message || 'Could not load categories', 'error');
+  }
+}
+
+function renderCategoryOptions(selected = '') {
+  const sel = document.getElementById('mi-category');
+  if (!sel) return;
+  const current = selected || sel.value;
+  sel.innerHTML = `
+    <option value="" disabled ${current ? '' : 'selected'}>${t('selectCategoryPlaceholder')}</option>
+    ${miCategories.map((c) => `<option value="${escapeHtml(c.name)}" ${c.name === current ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
+  `;
 }
 
 function miSubmitButtonInner(mode) {
@@ -215,11 +238,19 @@ function manageItemsSheetHtml() {
       <div class="field-row">
         <div class="field">
           <label for="mi-sku-code">${t('fieldSkuCode')}</label>
-          <input type="text" id="mi-sku-code" required>
+          <input type="text" id="mi-sku-code" disabled placeholder="${t('skuCodeAutoPlaceholder')}">
         </div>
         <div class="field">
           <label for="mi-category">${t('fieldCategory')}</label>
-          <input type="text" id="mi-category" required>
+          <div class="field-with-btn">
+            <select id="mi-category" required></select>
+            <button type="button" class="btn-icon-add" id="mi-category-add-btn" title="${t('addCategoryTitle')}" aria-label="${t('addCategoryTitle')}">${icon('plusCircle', 18)}</button>
+          </div>
+          <div class="new-category-row" id="mi-category-new-row" hidden>
+            <input type="text" id="mi-category-new-input" placeholder="${t('newCategoryPlaceholder')}">
+            <button type="button" class="btn btn-outline btn-sm" id="mi-category-new-confirm">${icon('check', 14)}<span>${t('add')}</span></button>
+            <button type="button" class="btn btn-ghost btn-sm" id="mi-category-new-cancel">${icon('xCircle', 14)}</button>
+          </div>
         </div>
       </div>
       <div class="field">
@@ -266,9 +297,45 @@ function wireManageItemsForm() {
   document.getElementById('mi-cancel-edit').addEventListener('click', () => {
     miEditingId = null;
     form.reset();
+    document.getElementById('mi-sku-code').value = '';
+    renderCategoryOptions();
     document.getElementById('mi-submit').innerHTML = miSubmitButtonInner('add');
     document.getElementById('mi-cancel-edit').hidden = true;
   });
+
+  const addBtn = document.getElementById('mi-category-add-btn');
+  const newRow = document.getElementById('mi-category-new-row');
+  const newInput = document.getElementById('mi-category-new-input');
+  addBtn.addEventListener('click', () => {
+    newRow.hidden = !newRow.hidden;
+    if (!newRow.hidden) newInput.focus();
+  });
+  document.getElementById('mi-category-new-cancel').addEventListener('click', () => {
+    newInput.value = '';
+    newRow.hidden = true;
+  });
+  document.getElementById('mi-category-new-confirm').addEventListener('click', () => onAddCategory(newInput, newRow));
+  newInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); onAddCategory(newInput, newRow); }
+  });
+}
+
+async function onAddCategory(newInput, newRow) {
+  const name = newInput.value.trim();
+  const errEl = document.getElementById('mi-error');
+  errEl.innerHTML = '';
+  if (!name) return;
+  try {
+    await DB.createCategory(name);
+    miCategories = await DB.listCategories();
+    renderCategoryOptions(name);
+    newInput.value = '';
+    newRow.hidden = true;
+    toast(t('toastCategoryCreated'), 'success');
+  } catch (err) {
+    const msg = /duplicate|unique/i.test(err.message || '') ? t('errorCategoryExists') : (err.message || 'Could not add category');
+    errEl.innerHTML = `<div class="form-error">${escapeHtml(msg)}</div>`;
+  }
 }
 
 async function onManageItemSubmit(e) {
@@ -276,7 +343,6 @@ async function onManageItemSubmit(e) {
   const errEl = document.getElementById('mi-error');
   errEl.innerHTML = '';
   const patch = {
-    sku_code: document.getElementById('mi-sku-code').value.trim(),
     name: document.getElementById('mi-name').value.trim(),
     category: document.getElementById('mi-category').value.trim(),
     base_uom: document.getElementById('mi-base-uom').value.trim(),
@@ -297,6 +363,8 @@ async function onManageItemSubmit(e) {
     }
     miEditingId = null;
     e.target.reset();
+    document.getElementById('mi-sku-code').value = '';
+    renderCategoryOptions();
     document.getElementById('mi-submit').innerHTML = miSubmitButtonInner('add');
     document.getElementById('mi-cancel-edit').hidden = true;
     await loadManageItemsList();
@@ -361,7 +429,7 @@ function startEditSku(id) {
   miEditingId = id;
   document.getElementById('mi-sku-code').value = sku.sku_code;
   document.getElementById('mi-name').value = sku.name;
-  document.getElementById('mi-category').value = sku.category;
+  renderCategoryOptions(sku.category);
   document.getElementById('mi-base-uom').value = sku.base_uom;
   document.getElementById('mi-alt-uom').value = sku.alt_uom || '';
   document.getElementById('mi-conversion-factor').value = sku.conversion_factor ?? '';
