@@ -72,6 +72,11 @@ create table if not exists requests (
 create index if not exists requests_status_idx on requests(status);
 create index if not exists requests_sku_id_idx on requests(sku_id);
 
+-- Who actually picked the order up — set by issue_stock() when the request
+-- is closed, from the same name typed into the "picked up by" field on the
+-- issue screen. Nullable: only fulfilled requests will have one.
+alter table requests add column if not exists picked_up_by text;
+
 -- ----------------------------------------------------------------------------
 -- 4. Transactions — every receive / issue event (the movement ledger)
 -- ----------------------------------------------------------------------------
@@ -101,6 +106,20 @@ create table if not exists discrepancies (
   variance        numeric generated always as (actual_qty - requested_qty) stored,
   notes           text,
   created_at      timestamptz not null default now()
+);
+
+-- ----------------------------------------------------------------------------
+-- 5b. Lot numbering — a per-SKU, per-day running counter, so lot codes read
+--     as SKU-YYMMDD-NNN (e.g. CEM-001-260906-001, then -002 for the next
+--     batch of the same item received that same day). The upsert below is
+--     one atomic statement, so two staff receiving the same item at the same
+--     moment still get distinct, gap-free numbers.
+-- ----------------------------------------------------------------------------
+create table if not exists lot_sequences (
+  sku_id    uuid not null references skus(id) on delete cascade,
+  seq_date  date not null,
+  last_seq  integer not null default 0,
+  primary key (sku_id, seq_date)
 );
 
 -- ----------------------------------------------------------------------------
@@ -162,7 +181,9 @@ order by d.created_at desc;
 -- ----------------------------------------------------------------------------
 
 -- Receiving: create a lot + its opening transaction, return the new lot
--- (the caller renders lot_code as a QR code for the sticker).
+-- (the caller renders lot_code as a QR code for the sticker). The lot code
+-- is SKU-YYMMDD-NNN, NNN being a running count of receipts of this SKU on
+-- this date (see lot_sequences above).
 create or replace function receive_stock(
   p_sku_id uuid, p_qty numeric, p_uom text,
   p_received_by text default null, p_supplier_ref text default null
@@ -172,13 +193,25 @@ as $$
 declare
   v_lot lots;
   v_lot_code text;
+  v_sku_code text;
+  v_seq int;
 begin
   if p_qty <= 0 then
     raise exception 'Quantity must be greater than zero';
   end if;
 
-  v_lot_code := 'LOT-' || to_char(now(), 'YYMMDD') || '-'
-                || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 6));
+  select sku_code into v_sku_code from skus where id = p_sku_id;
+  if not found then
+    raise exception 'SKU not found';
+  end if;
+
+  insert into lot_sequences (sku_id, seq_date, last_seq)
+  values (p_sku_id, current_date, 1)
+  on conflict (sku_id, seq_date)
+  do update set last_seq = lot_sequences.last_seq + 1
+  returning last_seq into v_seq;
+
+  v_lot_code := v_sku_code || '-' || to_char(current_date, 'YYMMDD') || '-' || lpad(v_seq::text, 3, '0');
 
   insert into lots (lot_code, sku_id, qty_received, balance, uom, received_by, supplier_ref)
   values (v_lot_code, p_sku_id, p_qty, p_qty, p_uom, p_received_by, p_supplier_ref)
@@ -242,7 +275,7 @@ begin
     returning * into v_discrepancy;
   end if;
 
-  update requests set status = 'fulfilled' where id = p_request_id;
+  update requests set status = 'fulfilled', picked_up_by = p_performed_by where id = p_request_id;
 
   return jsonb_build_object(
     'transaction', to_jsonb(v_txn),
@@ -263,6 +296,7 @@ alter table lots enable row level security;
 alter table requests enable row level security;
 alter table transactions enable row level security;
 alter table discrepancies enable row level security;
+alter table lot_sequences enable row level security;
 
 drop policy if exists "anon full access - skus" on skus;
 create policy "anon full access - skus" on skus for all using (true) with check (true);
@@ -278,6 +312,9 @@ create policy "anon full access - transactions" on transactions for all using (t
 
 drop policy if exists "anon full access - discrepancies" on discrepancies;
 create policy "anon full access - discrepancies" on discrepancies for all using (true) with check (true);
+
+drop policy if exists "anon full access - lot_sequences" on lot_sequences;
+create policy "anon full access - lot_sequences" on lot_sequences for all using (true) with check (true);
 
 -- ----------------------------------------------------------------------------
 -- 9. Seed data — a handful of construction-material SKUs so the app has

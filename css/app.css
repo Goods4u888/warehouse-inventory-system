@@ -49,6 +49,7 @@ a { color: inherit; }
   font-size: var(--t-micro);
   color: var(--ink-3);
 }
+.header-actions { display: flex; align-items: center; gap: var(--s2); }
 
 main {
   padding: var(--s5) var(--pad) calc(var(--tabbar-h) + var(--s8));
@@ -287,4 +288,20 @@ td.num, th.num { text-align: right; font-family: var(--mono); }
   .header, .tabbar, .btn, .toast { display: none !important; }
   body { background: #fff; }
   main { padding: 0; }
+}
+
+/* ---- Tablet and up ------------------------------------------------------------------------
+   Same single codebase, more room: card lists (stock, requests, manage-items) move to a
+   grid instead of one long column, and the shell widens a step at a time so the tab bar and
+   sheet — still anchored bottom, which reads fine as a drawer on a tablet too — don't stretch
+   edge-to-edge on a much wider screen. */
+@media (min-width: 640px) {
+  :root { --shell: 900px; }
+  .card-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--s3); }
+  .card-list .card + .card { margin-top: 0; }
+  .field-row.field-row-3 { grid-template-columns: repeat(3, 1fr); }
+}
+@media (min-width: 1024px) {
+  :root { --shell: 1080px; }
+  .card-list { grid-template-columns: repeat(3, 1fr); }
 }
