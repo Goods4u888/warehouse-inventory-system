@@ -45,8 +45,9 @@ a { color: inherit; }
 }
 .header-title {
   font-size: var(--t-sec);
-  font-weight: 600;
-  letter-spacing: -.01em;
+  font-weight: 700;
+  letter-spacing: .02em;
+  text-transform: uppercase;
 }
 .header-sub {
   font-family: var(--mono);
@@ -90,7 +91,12 @@ main {
   transition: background .2s var(--ease), border-color .2s var(--ease), opacity .2s var(--ease);
   touch-action: manipulation;
 }
-.btn-primary { background: var(--signal); color: var(--signal-ink); }
+/* Full stadium pill is reserved for filled, single-line committed actions —
+   the reference's FILTER/SAVE/SHOW RESULTS black buttons. Outline/ghost/
+   danger buttons (often short inline row actions whose label can wrap in
+   Thai) keep the more modest --r-control radius, which stays legible when
+   the text wraps instead of collapsing into a blob. */
+.btn-primary { background: var(--signal); color: var(--signal-ink); border-radius: var(--r-commit); }
 .btn-primary:hover { background: var(--signal-hover); }
 .btn-primary:disabled { opacity: .4; cursor: not-allowed; }
 .btn-outline { background: transparent; border-color: var(--line-strong); color: var(--ink); }
@@ -147,13 +153,13 @@ main {
 .search-wrap { position: relative; margin-bottom: var(--s3); }
 .search-wrap > svg.icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--ink-3); pointer-events: none; }
 .search-input {
-  display: block; width: 100%; border: 1px solid var(--line-mid); border-radius: var(--r-control);
+  display: block; width: 100%; border: 1px solid transparent; border-radius: var(--r-commit);
   padding: 10px var(--s3) 10px 36px; font-size: var(--t-meta); font-family: inherit;
-  background: var(--paper); color: var(--ink); margin-bottom: 0;
+  background: var(--paper-2); color: var(--ink); margin-bottom: 0;
 }
 .search-input::placeholder { color: var(--ink-3); }
 .search-input:focus {
-  outline: none; border-color: var(--ink-3); box-shadow: 0 0 0 3px var(--signal-wash);
+  outline: none; background: var(--paper); border-color: var(--line-strong); box-shadow: 0 0 0 3px var(--signal-wash);
 }
 
 /* ---- Icons inside buttons/chips --------------------------------------------------- */
@@ -186,11 +192,14 @@ main {
 /* ---- Section headers -------------------------------------------------------- */
 .section-head { display: flex; align-items: baseline; justify-content: space-between; margin: var(--s6) 0 var(--s3); }
 .section-head:first-child { margin-top: 0; }
-.section-head h2 { font-size: var(--t-sec); margin: 0; font-weight: 600; }
+.section-head h2 {
+  font-size: var(--t-sec); margin: 0; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .03em;
+}
 .section-head .count { font-family: var(--mono); color: var(--ink-3); font-size: var(--t-micro); }
 
 .eyebrow {
-  font-family: var(--mono); font-size: var(--t-micro); letter-spacing: .08em;
+  font-family: var(--ui); font-weight: 700; font-size: var(--t-micro); letter-spacing: .08em;
   text-transform: uppercase; color: var(--ink-3); margin: 0 0 var(--s2);
 }
 
@@ -207,16 +216,16 @@ main {
   margin-bottom: var(--s2);
 }
 .field input, .field select, .field textarea {
-  width: 100%; border: 1px solid var(--line-mid); border-radius: var(--r-control);
+  width: 100%; border: 1px solid transparent; border-radius: var(--r-control);
   padding: 11px var(--s3); font-size: var(--t-body); font-family: inherit;
-  background: var(--paper); color: var(--ink);
+  background: var(--paper-2); color: var(--ink);
 }
 .field textarea { resize: vertical; min-height: 72px; }
 .field input:focus, .field select:focus, .field textarea:focus {
-  outline: none; border-color: var(--ink-3); box-shadow: 0 0 0 3px var(--signal-wash);
+  outline: none; background: var(--paper); border-color: var(--line-strong); box-shadow: 0 0 0 3px var(--signal-wash);
 }
 .field-hint { font-size: var(--t-micro); color: var(--ink-3); margin-top: var(--s1); }
-.field input:disabled { background: var(--paper-2); color: var(--ink-3); cursor: not-allowed; }
+.field input:disabled { background: var(--line); color: var(--ink-3); cursor: not-allowed; }
 
 .field-with-btn { display: flex; gap: var(--s2); align-items: stretch; }
 .field-with-btn select { flex: 1; min-width: 0; }
@@ -335,30 +344,38 @@ td.num, th.num { text-align: right; font-family: var(--mono); }
   .confirm-code { background: #fff !important; color: #111 !important; border: 1px solid #ccc; }
 }
 
-/* ---- Landing page (index.html) -------------------------------------------------------- */
-.landing {
-  min-height: 100vh; min-height: 100dvh;
+/* ---- Landing page (index.html) — a hub screen, same component library as
+   the rest of the app (header, eyebrow, chip) plus one new pattern: a grid
+   of icon tiles, the app's two entry points standing in for what would be
+   a "Sales / Inventory / Purchasing" hub grid in the reference system. */
+body.hub-page {
   display: flex; align-items: center; justify-content: center;
-  padding: var(--pad); position: relative;
+  min-height: 100vh; min-height: 100dvh;
 }
-.landing-lang { position: absolute; top: var(--s4); right: var(--s4); }
-.landing-inner { width: 100%; max-width: 440px; text-align: center; }
-.landing-title { font-size: var(--t-h1); font-weight: 700; margin-bottom: var(--s1); }
-.landing-subtitle { color: var(--ink-3); font-size: var(--t-meta); margin-bottom: var(--s7); }
-.landing-cards { display: flex; flex-direction: column; gap: var(--s4); }
-.landing-card {
-  display: block; text-align: left; text-decoration: none; color: inherit;
+body.hub-page .app { min-height: 0; }
+body.hub-page main { padding-bottom: var(--s6); }
+.hub-grid {
+  display: flex; flex-direction: column; gap: var(--s4);
+  margin-top: var(--s4);
+}
+.hub-tile {
+  display: flex; flex-direction: column; align-items: flex-start; gap: var(--s3);
   background: var(--card); border-radius: var(--r-media); box-shadow: var(--lift-1);
-  padding: var(--s5); transition: box-shadow .2s var(--ease), transform .2s var(--ease);
+  padding: var(--s5); text-decoration: none; color: inherit;
+  transition: box-shadow .2s var(--ease), transform .2s var(--ease);
 }
-.landing-card:hover { box-shadow: var(--lift-2); transform: translateY(-1px); }
-.landing-card-icon {
+.hub-tile:hover, .hub-tile:focus-visible { box-shadow: var(--lift-2); transform: translateY(-2px); outline: none; }
+.hub-tile-icon {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 48px; height: 48px; border-radius: var(--r-control);
-  background: var(--signal-wash); color: var(--signal); margin-bottom: var(--s3);
+  width: 56px; height: 56px; border-radius: var(--r-media);
+  background: var(--accent-wash); color: var(--accent-ink); flex: none;
 }
-.landing-card-title { font-size: var(--t-sec); font-weight: 600; margin-bottom: var(--s1); }
-.landing-card-desc { color: var(--ink-3); font-size: var(--t-meta); }
+.hub-tile-title { font-size: var(--t-sec); font-weight: 700; }
+.hub-tile-desc { color: var(--ink-2); font-size: var(--t-meta); }
+.hub-tile-cta {
+  display: inline-flex; align-items: center; gap: var(--s2);
+  margin-top: var(--s1); font-size: var(--t-micro); font-weight: 700; color: var(--ink);
+}
 
 /* ---- Admin login screen (admin.html) -------------------------------------------------- */
 .login-screen {
@@ -420,8 +437,8 @@ td.num, th.num { text-align: right; font-family: var(--mono); }
   .card-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--s3); }
   .card-list .card + .card { margin-top: 0; }
   .field-row.field-row-3 { grid-template-columns: repeat(3, 1fr); }
-  .landing-cards { flex-direction: row; }
-  .landing-card { flex: 1; }
+  .hub-grid { flex-direction: row; }
+  .hub-tile { flex: 1; }
 }
 @media (min-width: 1024px) {
   :root { --shell: 1080px; }

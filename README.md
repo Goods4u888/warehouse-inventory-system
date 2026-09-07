@@ -78,8 +78,13 @@ in the database enforces this split for real, not just in the UI — see
 
 ## What's in v2
 
-- **Landing page** (`index.html`) — two buttons, Request form and Admin.
-  Nothing else lives here; it doesn't talk to the database at all.
+- **Landing page** (`index.html`) — two doors, Request form and Admin.
+  Nothing else lives here; it doesn't talk to the database at all. It's a
+  hub screen built from the same component library as the rest of the app
+  (header, eyebrow, chip, card) rather than a separate marketing page, so it
+  reads as one more screen in the system, not a different site: an icon
+  tile per door, each badged with whether it needs a login before you click
+  it.
 - **Public request form** (`request.html`) — no login. Name and department,
   then either search the same item catalog Stock/Receive use and say how
   many, add a free-text comment, or both — the form only insists on at least
@@ -187,7 +192,7 @@ index.html                     landing page — Request form / Admin, nothing el
 admin.html                     the admin app shell (5 tabs + a bottom sheet for forms) behind login
 request.html                   the public request form + printable confirmation
 css/tokens.css                 design tokens — colour, type, spacing (nothing raw in app.css)
-css/app.css                    components
+css/app.css                    every component, shared by all three pages (one visual language)
 js/config.js                   Supabase URL + anon key
 js/db.js                       every Supabase call the app makes, incl. Auth.signIn/signOut
 js/qr.js                       QR generation (sticker) + camera scanning

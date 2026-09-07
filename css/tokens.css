@@ -1,60 +1,83 @@
 /* ============================================================================
-   Design tokens — instrument register (prom-design system B shape)
-   Subject: a construction-materials warehouse. The ground is poured-concrete
-   grey, the ink is steel charcoal, and the category triads are drawn from the
-   materials themselves (cement dust, galvanized steel, sand, rust hardware)
-   rather than a generic brand palette. No raw hex or px belongs in app.css —
-   everything routes through here.
+   Design tokens — instrument register (prom-design system B shape), v3.
+   Direction: "Supply Chain Hub" — a clean monochrome app-UI system (white
+   cards on light grey, near-black ink, near-black pill buttons for every
+   committed action) with exactly one accent colour: a workwear green, used
+   only for the hub icon tiles, the "healthy stock" state, and success
+   moments — never for buttons, never for more than one thing on screen at
+   once. Material category chips stay colour-coded for fast scanning, but
+   none of them may share the accent's green (see --cat-cleaning below).
+   No raw hex or px belongs in app.css — everything routes through here.
    ========================================================================= */
 
 :root {
-  /* surfaces: poured concrete, never pure white */
-  --ground:   #EFEDE6;
+  /* surfaces: light neutral grey, never pure white outside cards */
+  --ground:   #F2F1ED;
   --paper:    #FFFFFF;
-  --paper-2:  #E7E2D4;
+  --paper-2:  #E9E7E1;
   --card:     #FFFFFF;
 
   /* line ramp — hierarchy through borders, not just existence */
-  --line:        #DAD3C2;
-  --line-mid:    #C2B9A2;
-  --line-strong: #8B8370;
+  --line:        #E2E0D8;
+  --line-mid:    #D0CDC2;
+  --line-strong: #B0ABA0;
 
-  /* ink ramp — steel charcoal, faint green-grey undertone */
-  --ink:   #1D211C;
-  --ink-2: #4B5147;
-  --ink-3: #6B7066;
+  /* ink ramp — near-black, neutral (not warm, not cool). ink-2 and ink-3
+     share one value: a true lighter tertiary tone reads under 4.5:1 on the
+     paper-2 grey fills this palette leans on (search bars, disabled
+     inputs, segmented tabs), so — same fix as the landing page's earlier
+     contrast pass — there is no third, lighter step here. */
+  --ink:   #17171A;
+  --ink-2: #66655F;
+  --ink-3: #66655F;
 
-  /* signal — the one action colour, near-black like a tool, not a brand */
-  --signal:       #1A1D18;
-  --signal-hover: #2C3128;
-  --signal-wash:  #E7EAE2;
+  /* signal — the one action colour: near-black, like the reference's pill
+     buttons (FILTER, SAVE, SHOW RESULTS). Not the brand accent — the accent
+     is green, reserved for icon tiles and status (see --accent below). */
+  --signal:       #14141A;
+  --signal-hover: #2B2B32;
+  --signal-wash:  #E9E7E1;
   --signal-ink:   #FFFFFF;
 
-  /* state tokens — product facts, not decoration */
-  --ok:           #3F6B4A;  --ok-wash:           #E6EFE7;
-  --low:          #A85A2A;  --low-wash:          #F5E7D9;
-  --discrepancy:  #A23B3B;  --discrepancy-wash:  #F5E1DF;
+  /* accent — the one brand colour: a workwear green, standing in for the
+     material this system is really about (steel roofing, painted racking).
+     Used for hub icon tiles, the "healthy stock" state and success screens
+     only — everything else stays monochrome. */
+  --accent:       #2E7D54;
+  --accent-hover: #256644;
+  --accent-wash:  #E4F1E9;
+  --accent-ink:   #1F5B3C;
 
-  /* material category triads: base / wash / beacon */
-  --cat-cement:    #7D7666;  --cat-cement-wash:    #EFEDE6;  --cat-cement-beacon:    #A9A18C;
+  /* state tokens — product facts, not decoration. "ok" intentionally shares
+     the brand accent (a healthy stock level is the good outcome this system
+     exists to protect); low/discrepancy stay their own warning colours. */
+  --ok:           #2E7D54;  --ok-wash:           #E4F1E9;
+  --low:          #A6631F;  --low-wash:          #F5E8D8;
+  --discrepancy:  #B23B3B;  --discrepancy-wash:  #F6E2E0;
+
+  /* material category triads: base / wash / beacon. Kept colour-coded for
+     scanning speed, but none of them may sit on the accent's green — that
+     hue is reserved, so "Cleaning Supplies" (previously teal-green) moved
+     to blue instead. */
+  --cat-cement:    #7D7666;  --cat-cement-wash:    #F0EEE8;  --cat-cement-beacon:    #A9A18C;
   --cat-steel:     #33525C;  --cat-steel-wash:     #E6EDEE;  --cat-steel-beacon:     #5F8B98;
   --cat-aggregate: #7C6A45;  --cat-aggregate-wash: #F1EBDC;  --cat-aggregate-beacon: #B39D66;
   --cat-hardware:  #6B4630;  --cat-hardware-wash:  #F1E5DC;  --cat-hardware-beacon:  #A9765A;
   --cat-electrical:#8A6D1D;  --cat-electrical-wash:#F3EDD4;  --cat-electrical-beacon:#C9A227;
-  --cat-sanitary:  #2F6B6E;  --cat-sanitary-wash:  #E3EEEE;  --cat-sanitary-beacon:  #4F9DA0;
+  --cat-sanitary:  #4A5FA0;  --cat-sanitary-wash:  #E7E9F5;  --cat-sanitary-beacon:  #7B8AC4;
   --cat-paint:     #6B4368;  --cat-paint-wash:     #F0E3EF;  --cat-paint-beacon:     #9C6B98;
   --cat-lumber:    #8B5E34;  --cat-lumber-wash:    #F1E6D8;  --cat-lumber-beacon:    #B98A54;
-  --cat-cleaning:  #2E7A6B;  --cat-cleaning-wash:  #E1F0EC;  --cat-cleaning-beacon:  #4FA695;
-  --cat-other:     #5A5F58;  --cat-other-wash:     #EAEAE6;  --cat-other-beacon:     #8B9086;
+  --cat-cleaning:  #2E6B8F;  --cat-cleaning-wash:  #E2EEF3;  --cat-cleaning-beacon:  #5FA0C2;
+  --cat-other:     #5A5A58;  --cat-other-wash:     #EBEAE6;  --cat-other-beacon:     #8B8B86;
 
-  /* elevation: ring + shadow, crisp on this ground */
-  --lift-1: 0 0 0 1px rgba(29,33,28,.08), 0 1px 2px rgba(29,33,28,.05);
-  --lift-2: 0 0 0 1px rgba(29,33,28,.06), 0 6px 16px rgba(29,33,28,.10);
-  --lift-3: 0 12px 32px rgba(29,33,28,.20);
+  /* elevation: mostly a 1px ring, barely any shadow — flat like the reference */
+  --lift-1: 0 0 0 1px rgba(23,23,26,.07), 0 1px 2px rgba(23,23,26,.04);
+  --lift-2: 0 0 0 1px rgba(23,23,26,.06), 0 6px 16px rgba(23,23,26,.08);
+  --lift-3: 0 12px 32px rgba(23,23,26,.18);
 
   /* radius by role, not by size */
-  --r-control: 10px;
-  --r-media:   12px;
+  --r-control: 12px;
+  --r-media:   16px;
   --r-sheet:   20px;
   --r-commit:  999px;
 
@@ -91,25 +114,30 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --ground:   #141713;
-    --paper:    #1B1E19;
-    --paper-2:  #23271F;
-    --card:     #1F231D;
+    --ground:   #131412;
+    --paper:    #1B1C19;
+    --paper-2:  #232420;
+    --card:     #1F201D;
 
-    --line:        #33372E;
-    --line-mid:    #454A3E;
-    --line-strong: #6B7060;
+    --line:        #34352F;
+    --line-mid:    #46473F;
+    --line-strong: #6B6C61;
 
-    --ink:   #E9E7DE;
-    --ink-2: #AEB3A6;
-    --ink-3: #868C7D;
+    --ink:   #EDECE7;
+    --ink-2: #A8A79E;
+    --ink-3: #7C7B72;
 
-    --signal:       #E9E7DE;
-    --signal-hover: #F5F3EA;
-    --signal-wash:  #2A2D25;
-    --signal-ink:   #14170F;
+    --signal:       #EDECE7;
+    --signal-hover: #F7F6F2;
+    --signal-wash:  #2A2B26;
+    --signal-ink:   #14140F;
 
-    --ok:          #7FB889;  --ok-wash:          #1E2A20;
+    --accent:       #5FB587;
+    --accent-hover: #7AC79B;
+    --accent-wash:  #1C2A21;
+    --accent-ink:   #8ED0AA;
+
+    --ok:          #5FB587;  --ok-wash:          #1C2A21;
     --low:         #E29A5C;  --low-wash:         #362718;
     --discrepancy: #E2807D;  --discrepancy-wash: #362020;
 
@@ -118,11 +146,11 @@
     --cat-aggregate: #C7AD73;  --cat-aggregate-wash: #292317;  --cat-aggregate-beacon: #9C8352;
     --cat-hardware:  #C08A6A;  --cat-hardware-wash:  #2A211B;  --cat-hardware-beacon:  #8E5F44;
     --cat-electrical:#D9BE6E;  --cat-electrical-wash:#2B2415;  --cat-electrical-beacon:#A8863A;
-    --cat-sanitary:  #7FB3B5;  --cat-sanitary-wash:  #1C2626;  --cat-sanitary-beacon:  #3E7A7C;
+    --cat-sanitary:  #8FA3E0;  --cat-sanitary-wash:  #20242F;  --cat-sanitary-beacon:  #5F70A8;
     --cat-paint:     #B58FB2;  --cat-paint-wash:     #271F26;  --cat-paint-beacon:     #7A4F76;
     --cat-lumber:    #C7A06D;  --cat-lumber-wash:    #2A2115;  --cat-lumber-beacon:    #8F6A3E;
-    --cat-cleaning:  #7FC2B0;  --cat-cleaning-wash:  #1B2622;  --cat-cleaning-beacon:  #3E8874;
-    --cat-other:     #A2A79A;  --cat-other-wash:     #24261F;  --cat-other-beacon:     #6E7367;
+    --cat-cleaning:  #7FB8D9;  --cat-cleaning-wash:  #1C262E;  --cat-cleaning-beacon:  #3E7896;
+    --cat-other:     #A2A29C;  --cat-other-wash:     #242420;  --cat-other-beacon:     #6E6E67;
 
     --lift-1: 0 0 0 1px rgba(0,0,0,.35), 0 1px 2px rgba(0,0,0,.3);
     --lift-2: 0 0 0 1px rgba(0,0,0,.3), 0 6px 16px rgba(0,0,0,.4);
