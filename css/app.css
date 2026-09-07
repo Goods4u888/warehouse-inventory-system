@@ -390,6 +390,26 @@ td.num, th.num { text-align: right; font-family: var(--mono); }
   font-size: var(--t-meta); white-space: pre-wrap;
 }
 
+/* ---- Public request item search / picker (request.html) --------------------------------- */
+.req-item-results {
+  display: flex; flex-direction: column; gap: var(--s2);
+  margin-top: var(--s2); max-height: 260px; overflow-y: auto;
+}
+.req-item-option {
+  display: flex; align-items: center; gap: var(--s3);
+  width: 100%; text-align: left; border: 1px solid var(--line); border-radius: var(--r-control);
+  padding: var(--s3); background: var(--card); font-family: inherit; cursor: pointer;
+}
+.req-item-option:hover { background: var(--paper-2); }
+.req-item-option svg.icon { flex: none; color: var(--ink-3); }
+.req-item-option-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.req-item-empty { color: var(--ink-3); font-size: var(--t-micro); padding: var(--s2) 0; }
+.req-item-selected {
+  margin-top: var(--s3); border: 1px solid var(--line); border-radius: var(--r-control);
+  padding: var(--s3); background: var(--paper-2);
+}
+.req-item-selected-row { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--s3); }
+
 /* ---- Tablet and up ------------------------------------------------------------------------
    Same single codebase, more room: card lists (stock, requests, manage-items) move to a
    grid instead of one long column, and the shell widens a step at a time so the tab bar and

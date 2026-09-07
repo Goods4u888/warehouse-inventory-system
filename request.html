@@ -42,9 +42,33 @@
           <label for="req-department" data-i18n="fieldDepartment">Department</label>
           <input type="text" id="req-department" required>
         </div>
+
         <div class="field">
-          <label for="req-comment" data-i18n="fieldComment">What do you need?</label>
-          <textarea id="req-comment" data-i18n-placeholder="fieldCommentPh" placeholder="Describe what you need, how much, and where it's for…" style="min-height:130px" required></textarea>
+          <label data-i18n="fieldSelectItem">Item (optional)</label>
+          <div class="search-wrap" data-icon="search">
+            <input type="search" class="search-input" id="req-item-search" data-i18n-placeholder="searchItemsPlaceholder" placeholder="Search items by name or code" autocomplete="off">
+          </div>
+          <div id="req-item-results" class="req-item-results"></div>
+
+          <div id="req-item-selected" class="req-item-selected" hidden>
+            <div class="req-item-selected-row">
+              <div>
+                <strong id="req-item-selected-name"></strong>
+                <div class="card-meta mono" id="req-item-selected-code"></div>
+              </div>
+              <button type="button" class="btn btn-ghost btn-sm" id="req-item-clear" data-icon="xCircle"><span data-i18n="btnChangeItem">Change</span></button>
+            </div>
+            <div class="field" style="margin-top:var(--s3)">
+              <label for="req-item-qty" data-i18n="fieldQtyNeeded">Quantity</label>
+              <input type="number" id="req-item-qty" min="0.0001" step="any">
+            </div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="req-comment" data-i18n="fieldComment">Additional comments</label>
+          <textarea id="req-comment" data-i18n-placeholder="fieldCommentPh" placeholder="Anything else the warehouse team should know…" style="min-height:100px"></textarea>
+          <p class="field-hint" id="req-comment-hint" data-i18n="fieldCommentHint">Required if you didn't select an item above.</p>
         </div>
         <button class="btn btn-primary btn-block" type="submit" id="req-submit" data-icon="send"><span data-i18n="btnSubmitPublicRequest">Submit request</span></button>
       </form>
@@ -62,9 +86,10 @@
         <div class="confirm-rows">
           <div class="confirm-row"><span data-i18n="fieldRequesterName2">Your name</span><strong id="confirm-name"></strong></div>
           <div class="confirm-row"><span data-i18n="fieldDepartment">Department</span><strong id="confirm-department"></strong></div>
+          <div class="confirm-row" id="confirm-item-row" hidden><span data-i18n="fieldItem">Item</span><strong id="confirm-item"></strong></div>
           <div class="confirm-row"><span data-i18n="requestSubmittedAt">Submitted</span><strong id="confirm-when"></strong></div>
         </div>
-        <div class="confirm-comment" id="confirm-comment"></div>
+        <div class="confirm-comment" id="confirm-comment" hidden></div>
       </div>
 
       <div class="no-print" style="margin-top:var(--s4)">

@@ -47,6 +47,9 @@ const ICON_PATHS = {
   roller: '<rect x="3" y="4" width="14" height="6" rx="1.5"/><line x1="7" y1="10" x2="7" y2="14"/><rect x="5" y="14" width="4" height="6" rx="1"/>',
   planks: '<rect x="3" y="5" width="18" height="3.2" rx="1"/><rect x="3" y="10.4" width="18" height="3.2" rx="1"/><rect x="3" y="15.8" width="18" height="3.2" rx="1"/>',
   sparkle: '<path d="M12 3v4M12 17v4M5 5.5l2.8 2.8M16.2 15.7l2.8 2.8M3 12h4M17 12h4M5 18.5l2.8-2.8M16.2 8.3l2.8-2.8"/>',
+
+  // landing page badges
+  lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
 };
 
 function icon(name, size = 16) {

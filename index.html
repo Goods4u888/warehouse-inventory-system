@@ -6,33 +6,53 @@
 <title>Warehouse Inventory</title>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Trirong:wght@400;600&display=swap">
 
 <link rel="stylesheet" href="css/tokens.css">
-<link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="css/landing.css">
 </head>
 <body>
 
-<div class="landing">
-  <button class="btn btn-ghost btn-sm landing-lang" id="lang-toggle" data-icon="globe" aria-label="Switch language"><span id="lang-toggle-label">EN</span></button>
+<div class="landing-bar">
+  <button class="landing-lang" id="lang-toggle" data-icon="globe" data-icon-size="14" aria-label="Switch language"><span id="lang-toggle-label">EN</span></button>
+</div>
 
-  <div class="landing-inner">
-    <div class="landing-title" data-i18n="landingTitle">Warehouse Inventory</div>
-    <div class="landing-subtitle" data-i18n="landingSubtitle">Receiving · Requisition</div>
+<header class="landing-hero">
+  <div class="landing-eyebrow" data-i18n="landingEyebrow">RECEIVING &middot; REQUISITION</div>
+  <h1 class="landing-h1" data-i18n="landingTitle">Warehouse Inventory</h1>
+  <p class="landing-lede" data-i18n="landingLede">Every batch received gets a QR code. Every request gets a reference number the moment it's submitted.</p>
+</header>
 
-    <div class="landing-cards">
-      <a class="landing-card" href="request.html">
-        <span class="landing-card-icon" data-icon="send" data-icon-size="26"></span>
-        <div class="landing-card-title" data-i18n="landingRequesterTitle">Request form</div>
-        <div class="landing-card-desc" data-i18n="landingRequesterDesc">Fill out a request and get a reference number — no login needed.</div>
-      </a>
-      <a class="landing-card" href="admin.html">
-        <span class="landing-card-icon" data-icon="sliders" data-icon-size="26"></span>
-        <div class="landing-card-title" data-i18n="landingAdminTitle">Admin</div>
-        <div class="landing-card-desc" data-i18n="landingAdminDesc">Stock, receiving, scanning, requests, and reports. Staff login required.</div>
-      </a>
-    </div>
+<div class="landing-stats">
+  <div class="landing-stat">
+    <div class="landing-stat-value" data-i18n="landingStatCategoriesValue">10</div>
+    <div class="landing-stat-label" data-i18n="landingStatCategoriesLabel">material categories tracked</div>
   </div>
+  <div class="landing-stat">
+    <div class="landing-stat-value">REQ-YYMMDD-NNN</div>
+    <div class="landing-stat-label" data-i18n="landingStatRefLabel">reference number, issued instantly</div>
+  </div>
+  <div class="landing-stat">
+    <div class="landing-stat-value">TH / EN</div>
+    <div class="landing-stat-label" data-i18n="landingStatLangLabel">switch language anytime</div>
+  </div>
+</div>
+
+<div class="landing-portals">
+  <a class="landing-portal" href="request.html">
+    <span class="landing-portal-icon" data-icon="send" data-icon-size="22"></span>
+    <span class="landing-badge open"><span data-icon="checkCircle" data-icon-size="11"></span><span data-i18n="landingBadgeNoLogin">No login required</span></span>
+    <div class="landing-portal-title" data-i18n="landingRequesterTitle">Request form</div>
+    <div class="landing-portal-desc" data-i18n="landingRequesterDesc">Search the catalog and say how many, describe what you need, or both.</div>
+    <span class="landing-portal-cta"><span data-i18n="landingEnter">Open the form</span><span class="dot" data-icon="arrowRight" data-icon-size="14"></span></span>
+  </a>
+  <a class="landing-portal" href="admin.html">
+    <span class="landing-portal-icon" data-icon="sliders" data-icon-size="22"></span>
+    <span class="landing-badge gated"><span data-icon="lock" data-icon-size="11"></span><span data-i18n="landingBadgeLoginRequired">Staff login required</span></span>
+    <div class="landing-portal-title" data-i18n="landingAdminTitle">Admin</div>
+    <div class="landing-portal-desc" data-i18n="landingAdminDesc">Stock, receiving, scanning, requests, and reports in one place.</div>
+    <span class="landing-portal-cta"><span data-i18n="landingEnterAdmin">Sign in</span><span class="dot" data-icon="arrowRight" data-icon-size="14"></span></span>
+  </a>
 </div>
 
 <script src="js/i18n.js"></script>

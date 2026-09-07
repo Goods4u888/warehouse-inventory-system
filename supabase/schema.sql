@@ -10,9 +10,10 @@
 -- (admin.html — stock, receiving, scanning, requests management, reports)
 -- requires signing in through Supabase Auth first. Row Level Security below
 -- enforces this at the database level, not just in the UI: the anon key can
--- only INSERT into requests (via create_public_request()); every other
--- table, and every other operation on requests, requires the "authenticated"
--- role. See README.md for how to create the shared admin login.
+-- SELECT active skus (so the request form's item search works) and INSERT
+-- into requests (via create_public_request()); every other table, and every
+-- other operation on skus/requests, requires the "authenticated" role. See
+-- README.md for how to create the shared admin login.
 -- ============================================================================
 
 create extension if not exists pgcrypto;
@@ -405,18 +406,28 @@ begin
 end;
 $$;
 
--- The public requester form: no login, no item/quantity — just who's
--- asking, their department, and a free-text description. request_code is
--- assigned the same way lot_code is: an atomic per-day running counter, so
--- concurrent public submissions still get distinct, gap-free numbers.
+-- The public requester form: no login. A requester can either pick a
+-- specific item (searched from the same catalog Stock/Receive use) and say
+-- how many, or just describe what they need in free text, or both — the
+-- requests_item_or_note_chk constraint only insists on at least one.
+-- request_code is assigned the same way lot_code is: an atomic per-day
+-- running counter, so concurrent public submissions still get distinct,
+-- gap-free numbers.
 -- security definer: anon can INSERT into requests but (by design) has no
 -- SELECT policy on it, so a plain "returning *" as anon would itself be
 -- blocked by RLS (RETURNING acts like a SELECT of the new row). Running as
 -- the function owner — who owns the table and so bypasses its RLS — lets
 -- this one narrow, parameter-controlled insert hand back the new row
 -- (with its request_code) without opening general read access to anon.
+-- Dropped and recreated (rather than create-or-replace) because the
+-- parameter list changed from the v2.0 version (name/department/comment
+-- only) — Postgres treats a different argument list as a different
+-- function, and this avoids leaving the old 3-argument overload behind.
+drop function if exists create_public_request(text, text, text);
+
 create or replace function create_public_request(
-  p_requester_name text, p_department text, p_comment text
+  p_requester_name text, p_department text, p_comment text,
+  p_sku_id uuid default null, p_qty_requested numeric default null
 ) returns requests
 language plpgsql
 security definer
@@ -426,12 +437,22 @@ declare
   v_seq int;
   v_code text;
   v_request requests;
+  v_sku_ok boolean;
 begin
   if coalesce(trim(p_requester_name), '') = '' then
     raise exception 'Requester name is required';
   end if;
-  if coalesce(trim(p_comment), '') = '' then
-    raise exception 'Please describe what you need';
+
+  if p_sku_id is not null then
+    select exists(select 1 from skus where id = p_sku_id and is_active = true) into v_sku_ok;
+    if not v_sku_ok then
+      raise exception 'Selected item is not available';
+    end if;
+    if p_qty_requested is null or p_qty_requested <= 0 then
+      raise exception 'Please enter a quantity';
+    end if;
+  elsif coalesce(trim(p_comment), '') = '' then
+    raise exception 'Please select an item or describe what you need';
   end if;
 
   insert into request_sequences (seq_date, last_seq)
@@ -441,8 +462,11 @@ begin
 
   v_code := 'REQ-' || to_char(current_date, 'YYMMDD') || '-' || lpad(v_seq::text, 3, '0');
 
-  insert into requests (request_code, requester_name, department, notes)
-  values (v_code, trim(p_requester_name), nullif(trim(p_department), ''), trim(p_comment))
+  insert into requests (request_code, requester_name, department, sku_id, qty_requested, notes)
+  values (
+    v_code, trim(p_requester_name), nullif(trim(p_department), ''),
+    p_sku_id, p_qty_requested, nullif(trim(p_comment), '')
+  )
   returning * into v_request;
 
   return v_request;
@@ -456,24 +480,26 @@ $$;
 revoke execute on function receive_stock(uuid, numeric, text, text, text) from public;
 revoke execute on function issue_stock(uuid, uuid, numeric, text) from public;
 revoke execute on function create_sku(text, text, text, text, numeric, numeric) from public;
-revoke execute on function create_public_request(text, text, text) from public;
+revoke execute on function create_public_request(text, text, text, uuid, numeric) from public;
 
 grant execute on function receive_stock(uuid, numeric, text, text, text) to authenticated;
 grant execute on function issue_stock(uuid, uuid, numeric, text) to authenticated;
 grant execute on function create_sku(text, text, text, text, numeric, numeric) to authenticated;
-grant execute on function create_public_request(text, text, text) to anon, authenticated;
+grant execute on function create_public_request(text, text, text, uuid, numeric) to anon, authenticated;
 
 -- ----------------------------------------------------------------------------
 -- 8. Row Level Security
 --
 -- v2: the requester form is genuinely public (no login), so from here on
--- "anon" means an anonymous member of the public, not trusted staff. Every
--- table except requests drops anon access entirely and is readable/writable
--- only by "authenticated" — i.e. someone who has signed in through the admin
--- login screen (see js/db.js Auth.signIn / README). requests itself splits
--- in two: anyone can INSERT (submit a request — always through
--- create_public_request(), never a raw insert with attacker-chosen fields
--- beyond requester_name/department/notes), but only authenticated can
+-- "anon" means an anonymous member of the public, not trusted staff. Most
+-- tables drop anon access entirely and are readable/writable only by
+-- "authenticated" — i.e. someone who has signed in through the admin login
+-- screen (see js/db.js Auth.signIn / README). Two tables carve out a narrow
+-- exception for the public form: skus lets anon SELECT active items only
+-- (read-only, so the form's item search works, but no insert/update/delete
+-- and no visibility into deactivated items); requests lets anon INSERT
+-- (submit a request — always through create_public_request(), never a raw
+-- insert with attacker-chosen fields), but only authenticated can
 -- SELECT/UPDATE/DELETE, so the public can't browse, search, or edit anyone
 -- else's requests. request_sequences is the one sequence table anon still
 -- needs, since create_public_request() has to bump it.
@@ -490,7 +516,13 @@ alter table request_sequences enable row level security;
 
 drop policy if exists "anon full access - skus" on skus;
 drop policy if exists "authenticated full access - skus" on skus;
+drop policy if exists "anon can view active skus" on skus;
 create policy "authenticated full access - skus" on skus for all to authenticated using (true) with check (true);
+-- The public request form lets a requester search the catalog and pick an
+-- item, so anon needs read access here too — but only to active items, and
+-- only SELECT (no insert/update/delete), same "narrow surface" principle as
+-- create_public_request() above.
+create policy "anon can view active skus" on skus for select to anon using (is_active = true);
 
 drop policy if exists "anon full access - categories" on categories;
 drop policy if exists "authenticated full access - categories" on categories;

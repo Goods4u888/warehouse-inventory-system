@@ -700,12 +700,14 @@ function renderRequestsList() {
     return;
   }
   list.innerHTML = rows.map((r) => {
-    const isGeneral = !r.sku_id; // submitted through the public requester form — no item/qty, just a comment
-    const title = isGeneral ? (r.department ? escapeHtml(r.department) : t('generalRequest')) : escapeHtml(r.skus?.name || 'Unknown item');
-    const meta = isGeneral
-      ? escapeHtml(r.requester_name)
-      : `${escapeHtml(r.requester_name)} · ${fmtQty(r.qty_requested)} ${escapeHtml(r.skus?.base_uom || '')}`;
-    const whenLine = isGeneral ? fmtDateTime(r.created_at) : t('neededBy', fmtDate(r.needed_by));
+    const hasItem = !!r.sku_id;
+    const title = hasItem ? escapeHtml(r.skus?.name || 'Unknown item') : (r.department ? escapeHtml(r.department) : t('generalRequest'));
+    const meta = hasItem
+      ? `${escapeHtml(r.requester_name)} · ${fmtQty(r.qty_requested)} ${escapeHtml(r.skus?.base_uom || '')}${r.department ? ' · ' + escapeHtml(r.department) : ''}`
+      : escapeHtml(r.requester_name);
+    // Internal requests set needed_by; requests submitted through the public
+    // form (with or without an item) don't, so fall back to when it came in.
+    const whenLine = r.needed_by ? t('neededBy', fmtDate(r.needed_by)) : fmtDateTime(r.created_at);
     return `
     <div class="card">
       <div class="card-row">
@@ -715,7 +717,7 @@ function renderRequestsList() {
         </div>
         <span class="chip ${statusChipClass(r.status)}">${statusLabel(r.status)}</span>
       </div>
-      ${isGeneral && r.notes ? `<div class="card-meta" style="margin-top:var(--s2)">${escapeHtml(r.notes)}</div>` : ''}
+      ${r.notes ? `<div class="card-meta" style="margin-top:var(--s2)">${escapeHtml(r.notes)}</div>` : ''}
       <div class="card-row" style="margin-top:var(--s3)">
         <span class="card-meta mono">${escapeHtml(r.request_code)} · ${whenLine}</span>
         ${nextStatusButton(r)}

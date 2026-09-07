@@ -55,6 +55,20 @@ const DB = {
     return data;
   },
 
+  // Used by the public request form's item search. anon can only ever see
+  // active items here (see "anon can view active skus" in schema.sql) — this
+  // is the same query as listSkus({activeOnly:true}) but named separately
+  // since it's called from a page with no login at all.
+  async listActiveSkusForRequest() {
+    const { data, error } = await supabaseClient
+      .from('skus')
+      .select('id, sku_code, name, category, base_uom')
+      .eq('is_active', true)
+      .order('name');
+    if (error) throw error;
+    return data;
+  },
+
   // sku_code is assigned by the system (random 3-letter prefix + running
   // number, e.g. "QZT-001") — create_sku() generates it server-side, so it's
   // never part of the payload the caller sends here.
@@ -173,13 +187,16 @@ const DB = {
     return data;
   },
 
-  // The public requester form (no login, no item picker) — request_code is
-  // assigned by the system the same way lot/SKU codes are (see schema.sql).
-  async createPublicRequest({ requesterName, department, comment }) {
+  // The public requester form (no login) — either an item + quantity picked
+  // from the catalog, a free-text comment, or both; request_code is assigned
+  // by the system the same way lot/SKU codes are (see schema.sql).
+  async createPublicRequest({ requesterName, department, comment, skuId, qty }) {
     const { data, error } = await supabaseClient.rpc('create_public_request', {
       p_requester_name: requesterName,
       p_department: department || null,
-      p_comment: comment,
+      p_comment: comment || null,
+      p_sku_id: skuId || null,
+      p_qty_requested: qty || null,
     });
     if (error) throw error;
     return data;

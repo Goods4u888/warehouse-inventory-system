@@ -80,17 +80,19 @@ in the database enforces this split for real, not just in the UI — see
 
 - **Landing page** (`index.html`) — two buttons, Request form and Admin.
   Nothing else lives here; it doesn't talk to the database at all.
-- **Public request form** (`request.html`) — no login. Name, department, and
-  a free-text comment for what's needed; submitting hands back a request
-  number (`REQ-YYMMDD-NNN`, assigned atomically by the database, same
-  pattern as lot and SKU codes) to write down or reference later. The
-  confirmation screen has a **Print / Save as PDF** button (the browser's own
-  print dialog, saved as a PDF from there) so a requester can keep a copy
-  without needing to be logged in to anything. These "general" requests land
-  in the same `requests` table and the same admin Requests tab as the
-  item-based requests staff create internally — one pipeline, told apart by
-  whether an item was picked (department + comment shown instead of item +
-  quantity).
+- **Public request form** (`request.html`) — no login. Name and department,
+  then either search the same item catalog Stock/Receive use and say how
+  many, add a free-text comment, or both — the form only insists on at least
+  one of item-or-comment. Submitting hands back a request number
+  (`REQ-YYMMDD-NNN`, assigned atomically by the database, same pattern as lot
+  and SKU codes) to write down or reference later. The confirmation screen
+  has a **Print / Save as PDF** button (the browser's own print dialog, saved
+  as a PDF from there) so a requester can keep a copy without needing to be
+  logged in to anything. These land in the same `requests` table and the
+  same admin Requests tab as the item-based requests staff create
+  internally — one pipeline. The item search only ever shows active items
+  (never deactivated ones), via a narrow read-only RLS policy — see "Public
+  form vs. admin login" below.
 - **Admin login** (`admin.html`) — a single shared password gates the whole
   admin app (Stock, Receive, Scan, Requests, Reports). It's real Supabase
   Auth underneath (see Setup step 3), so this isn't just a UI curtain: Row
@@ -152,19 +154,22 @@ in the database enforces this split for real, not just in the UI — see
 - **Public form vs. admin login.** `request.html` is meant to be reachable by
   anyone with the link, with no login — so the database, not just the app,
   treats it that way. The anon key (visible to anyone, since it ships in
-  `js/config.js` to every browser) can do exactly one thing: insert a new row
-  into `requests`, and only through the `create_public_request()` function,
-  which only accepts a name/department/comment — it can't read, edit, or
-  delete anything, including the row it just created. Every other table, and
-  every other operation on `requests` (search, status changes, fulfillment),
-  requires the "authenticated" role, which only exists after `Auth.signIn()`
-  succeeds against the one shared admin account (Setup step 3). "Picked up
-  by" / "requester name" stay free-text fields rather than per-person
-  identities even for logged-in staff — so within the admin side, they're
-  still a record of what someone typed, not a cryptographic guarantee of who
-  did what. Moving to per-staff accounts (Requester / Staff / Admin roles,
-  matching the spec's User entity) is a further policy change, not a
-  redesign — the shared-login groundwork is already in place.
+  `js/config.js` to every browser) can do exactly two things: read active
+  rows from `skus` (so the request form's item search works — deactivated
+  items stay invisible to it), and insert a new row into `requests`, only
+  through the `create_public_request()` function, which only accepts a
+  name/department/comment/item/quantity — it can't read, edit, or delete
+  anything, including the row it just created. Every other table, and every
+  other operation on `skus`/`requests` (editing the catalog, search, status
+  changes, fulfillment), requires the "authenticated" role, which only
+  exists after `Auth.signIn()` succeeds against the one shared admin account
+  (Setup step 3). "Picked up by" / "requester name" stay free-text fields
+  rather than per-person identities even for logged-in staff — so within the
+  admin side, they're still a record of what someone typed, not a
+  cryptographic guarantee of who did what. Moving to per-staff accounts
+  (Requester / Staff / Admin roles, matching the spec's User entity) is a
+  further policy change, not a redesign — the shared-login groundwork is
+  already in place.
 - **Unit conversion is stored, not yet enforced in the UI.** `alt_uom` and
   `conversion_factor` exist on each SKU, but Receive and Issue currently work
   in the SKU's base unit only. Wiring the conversion into the receive form
