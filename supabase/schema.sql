@@ -92,6 +92,21 @@ comment on table lots is 'A physical batch received on one date. The QR code pri
 
 create index if not exists lots_sku_id_idx on lots(sku_id);
 
+-- Returns (added 2026-09-07): materials that were issued/taken out coming
+-- back into stock go through return_stock() below, which creates a new lot
+-- just like receiving does (own lot_code, own QR sticker, scannable back
+-- out again) rather than folding the quantity back into whichever lot it
+-- originally came from — keeps every other lot's receive_date meaningful
+-- for FIFO/aging. `source` tells a return lot apart from a normal purchase
+-- receipt; `note` carries the freeform reason/condition a return_stock()
+-- call is given (blank for ordinary receiving). received_by is reused to
+-- mean "returned by" on a return lot — same column, same "whoever this
+-- transaction is associated with" role it already plays for receiving.
+alter table lots add column if not exists source text not null default 'purchase';
+alter table lots drop constraint if exists lots_source_chk;
+alter table lots add constraint lots_source_chk check (source in ('purchase','return'));
+alter table lots add column if not exists note text;
+
 -- ----------------------------------------------------------------------------
 -- 3. Requests — a requester's ask, fulfilled by scanning a lot
 -- ----------------------------------------------------------------------------
@@ -159,6 +174,13 @@ create table if not exists transactions (
 
 create index if not exists transactions_lot_id_idx on transactions(lot_id);
 create index if not exists transactions_created_at_idx on transactions(created_at desc);
+
+-- Widen the ledger to admit 'return' events alongside receive/issue (added
+-- 2026-09-07 for return_stock() below). Dropped and re-added rather than an
+-- "if not exists" guard, same pattern as the request_code migration above —
+-- cheap either way, and always ends in the same state.
+alter table transactions drop constraint if exists transactions_type_check;
+alter table transactions add constraint transactions_type_check check (type in ('receive','issue','return'));
 
 -- ----------------------------------------------------------------------------
 -- 5. Discrepancies — issued qty != requested qty (variance record)
@@ -234,7 +256,7 @@ select * from stock_by_sku where is_low order by on_hand asc;
 create or replace view stock_by_lot as
 select
   l.id as lot_id, l.lot_code, l.balance, l.qty_received, l.uom,
-  l.receive_date, l.supplier_ref,
+  l.receive_date, l.supplier_ref, l.source, l.received_by, l.note,
   s.id as sku_id, s.sku_code, s.name, s.category
 from lots l
 join skus s on s.id = l.sku_id
@@ -307,6 +329,55 @@ begin
 
   insert into transactions (type, lot_id, qty, uom, performed_by)
   values ('receive', v_lot.id, p_qty, p_uom, p_received_by);
+
+  return v_lot;
+end;
+$$;
+
+-- Returning: materials that were issued/taken out come back into stock.
+-- Deliberately freeform, like the receive flow, and not tied to a specific
+-- original request — a site return in practice often isn't cleanly one
+-- pickup's worth, and staff shouldn't have to hunt down the original
+-- request just to log it. Same lot-creation shape as receive_stock (own
+-- lot_code/QR sticker, same lot_sequences counter), just tagged
+-- source='return' and logged as a 'return' transaction instead of
+-- 'receive'. Admin-only — see grants below, not reachable from the public
+-- form.
+create or replace function return_stock(
+  p_sku_id uuid, p_qty numeric, p_uom text,
+  p_returned_by text default null, p_note text default null
+) returns lots
+language plpgsql
+as $$
+declare
+  v_lot lots;
+  v_lot_code text;
+  v_sku_code text;
+  v_seq int;
+begin
+  if p_qty <= 0 then
+    raise exception 'Quantity must be greater than zero';
+  end if;
+
+  select sku_code into v_sku_code from skus where id = p_sku_id;
+  if not found then
+    raise exception 'SKU not found';
+  end if;
+
+  insert into lot_sequences (sku_id, seq_date, last_seq)
+  values (p_sku_id, current_date, 1)
+  on conflict (sku_id, seq_date)
+  do update set last_seq = lot_sequences.last_seq + 1
+  returning last_seq into v_seq;
+
+  v_lot_code := v_sku_code || '-' || to_char(current_date, 'YYMMDD') || '-' || lpad(v_seq::text, 3, '0');
+
+  insert into lots (lot_code, sku_id, qty_received, balance, uom, received_by, note, source)
+  values (v_lot_code, p_sku_id, p_qty, p_qty, p_uom, p_returned_by, p_note, 'return')
+  returning * into v_lot;
+
+  insert into transactions (type, lot_id, qty, uom, performed_by)
+  values ('return', v_lot.id, p_qty, p_uom, p_returned_by);
 
   return v_lot;
 end;
@@ -529,11 +600,13 @@ $$;
 -- PUBLIC still covers it. Revoke PUBLIC explicitly, then grant only to the
 -- roles that should actually have it.
 revoke execute on function receive_stock(uuid, numeric, text, text, text) from public;
+revoke execute on function return_stock(uuid, numeric, text, text, text) from public;
 revoke execute on function issue_stock(uuid, uuid, numeric, text) from public;
 revoke execute on function create_sku(text, text, text, text, numeric, numeric) from public;
 revoke execute on function create_public_request(text, text, text, jsonb) from public;
 
 grant execute on function receive_stock(uuid, numeric, text, text, text) to authenticated;
+grant execute on function return_stock(uuid, numeric, text, text, text) to authenticated;
 grant execute on function issue_stock(uuid, uuid, numeric, text) to authenticated;
 grant execute on function create_sku(text, text, text, text, numeric, numeric) to authenticated;
 grant execute on function create_public_request(text, text, text, jsonb) to anon, authenticated;

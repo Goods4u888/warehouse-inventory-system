@@ -152,6 +152,23 @@ const DB = {
     return data;
   },
 
+  // ---- Returns ----------------------------------------------------------------
+  // Materials that were issued/taken out coming back into stock. Creates a
+  // new lot (own lot_code/QR sticker, source='return') just like receiving
+  // does — see return_stock() in schema.sql for why. Freeform: not tied to
+  // a specific original request.
+  async returnStock({ skuId, qty, uom, returnedBy, note }) {
+    const { data, error } = await supabaseClient.rpc('return_stock', {
+      p_sku_id: skuId,
+      p_qty: qty,
+      p_uom: uom,
+      p_returned_by: returnedBy || null,
+      p_note: note || null,
+    });
+    if (error) throw error;
+    return data;
+  },
+
   // ---- Requests ---------------------------------------------------------------
   async listRequests({ status = null } = {}) {
     let q = supabaseClient

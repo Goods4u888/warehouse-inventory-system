@@ -74,7 +74,7 @@ document.getElementById('lang-toggle').addEventListener('click', () => {
 function onLanguageChange() {
   renderRequestTabs();
   if (currentView === 'stock') { renderStockFacets(); renderStock(); }
-  else if (currentView === 'receive') { loadReceiveForm(); }
+  else if (currentView === 'receive') { loadReceiveForm(); loadReturnForm(); updateReceiveSectionTitle(); }
   else if (currentView === 'issue') { resetScanView(); }
   else if (currentView === 'requests') { loadRequests(); }
   else if (currentView === 'reports') { loadReport(currentReport); }
@@ -97,7 +97,7 @@ function showView(name) {
     else b.removeAttribute('aria-current');
   });
   if (name === 'stock') loadStock();
-  if (name === 'receive') loadReceiveForm();
+  if (name === 'receive') { loadReceiveForm(); loadReturnForm(); }
   if (name === 'issue') resetScanView();
   if (name === 'requests') loadRequests();
   if (name === 'reports') loadReport(currentReport);
@@ -455,9 +455,14 @@ async function toggleSkuActive(id, toActive) {
 // ============================================================================
 let activeSkus = [];
 
-async function loadReceiveForm() {
-  document.getElementById('receive-result').innerHTML = '';
-  document.getElementById('receive-error').innerHTML = '';
+// Split from loadReceiveForm() on purpose: this only refreshes the SKU
+// dropdown, without touching #receive-result. loadReceiveForm() (below)
+// additionally clears the result/error boxes, which is right when entering
+// the tab or switching language, but would be wrong right after a
+// successful submit — it would wipe the sticker that submit just rendered,
+// in the same tick, before it's ever seen. The submit handler calls this
+// function instead of loadReceiveForm() for that reason.
+async function refreshReceiveSkuOptions() {
   try {
     activeSkus = await DB.listSkus({ activeOnly: true });
     const sel = document.getElementById('rc-sku');
@@ -470,6 +475,12 @@ async function loadReceiveForm() {
   } catch (err) {
     toast(err.message || 'Could not load items', 'error');
   }
+}
+
+function loadReceiveForm() {
+  document.getElementById('receive-result').innerHTML = '';
+  document.getElementById('receive-error').innerHTML = '';
+  refreshReceiveSkuOptions();
 }
 
 document.getElementById('form-receive').addEventListener('submit', async (e) => {
@@ -490,7 +501,7 @@ document.getElementById('form-receive').addEventListener('submit', async (e) => 
     const sku = activeSkus.find((s) => s.id === skuId);
     renderReceiveResult(lot, sku);
     e.target.reset();
-    loadReceiveForm();
+    refreshReceiveSkuOptions();
     toast(t('toastLotReceived', lot.lot_code), 'success');
   } catch (err) {
     errEl.innerHTML = `<div class="form-error">${escapeHtml(err.message || 'Could not receive stock')}</div>`;
@@ -509,6 +520,93 @@ function renderReceiveResult(lot, sku) {
     </div>`;
   QR.renderInto(document.getElementById(`sticker-qr-${lot.lot_code}`), lot.lot_code, 120);
   document.getElementById('btn-print-sticker').addEventListener('click', () => window.print());
+}
+
+// ---- Receive / Return mode toggle -------------------------------------------
+document.querySelectorAll('#receive-mode-tabs button').forEach((b) => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('#receive-mode-tabs button').forEach((x) => x.setAttribute('aria-pressed', x === b));
+    const mode = b.dataset.mode;
+    document.getElementById('receive-mode-receive').hidden = mode !== 'receive';
+    document.getElementById('receive-mode-return').hidden = mode !== 'return';
+    updateReceiveSectionTitle();
+  });
+});
+function currentReceiveMode() {
+  const pressed = document.querySelector('#receive-mode-tabs button[aria-pressed="true"]');
+  return pressed ? pressed.dataset.mode : 'receive';
+}
+function updateReceiveSectionTitle() {
+  document.getElementById('receive-section-title').textContent =
+    currentReceiveMode() === 'return' ? t('returnTitle') : t('receiveTitle');
+}
+
+// ============================================================================
+// RETURN (materials coming back into stock — its own lot, like receiving)
+// ============================================================================
+let returnActiveSkus = [];
+
+// Same split as refreshReceiveSkuOptions()/loadReceiveForm() above, for the
+// same reason: don't let a post-submit refresh wipe the sticker that submit
+// just rendered into #return-result.
+async function refreshReturnSkuOptions() {
+  try {
+    returnActiveSkus = await DB.listSkus({ activeOnly: true });
+    const sel = document.getElementById('rt-sku');
+    sel.innerHTML = returnActiveSkus.map((s) => `<option value="${s.id}" data-uom="${escapeHtml(s.base_uom)}">${escapeHtml(s.sku_code)} — ${escapeHtml(s.name)}</option>`).join('');
+    if (returnActiveSkus.length) document.getElementById('rt-uom').value = returnActiveSkus[0].base_uom;
+    sel.onchange = () => {
+      const opt = sel.options[sel.selectedIndex];
+      document.getElementById('rt-uom').value = opt.dataset.uom;
+    };
+  } catch (err) {
+    toast(err.message || 'Could not load items', 'error');
+  }
+}
+
+function loadReturnForm() {
+  document.getElementById('return-result').innerHTML = '';
+  document.getElementById('return-error').innerHTML = '';
+  refreshReturnSkuOptions();
+}
+
+document.getElementById('form-return').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const errEl = document.getElementById('return-error');
+  errEl.innerHTML = '';
+  const skuId = document.getElementById('rt-sku').value;
+  const qty = parseFloat(document.getElementById('rt-qty').value);
+  const uom = document.getElementById('rt-uom').value.trim();
+  const note = document.getElementById('rt-note').value.trim();
+  const returnedBy = document.getElementById('rt-by').value.trim();
+
+  const btn = e.target.querySelector('button[type="submit"]');
+  const label = document.getElementById('rt-submit-label');
+  btn.disabled = true; label.textContent = t('btnGenerating');
+  try {
+    const lot = await DB.returnStock({ skuId, qty, uom, returnedBy, note });
+    const sku = returnActiveSkus.find((s) => s.id === skuId);
+    renderReturnResult(lot, sku);
+    e.target.reset();
+    refreshReturnSkuOptions();
+    toast(t('toastLotReturned', lot.lot_code), 'success');
+  } catch (err) {
+    errEl.innerHTML = `<div class="form-error">${escapeHtml(err.message || 'Could not record return')}</div>`;
+  } finally {
+    btn.disabled = false; label.textContent = t('btnGenerateReturnLot');
+  }
+});
+
+function renderReturnResult(lot, sku) {
+  const box = document.getElementById('return-result');
+  box.innerHTML = `
+    <div class="card">
+      <div class="eyebrow">${t('stickerReady')}</div>
+      ${QR.stickerHtml({ lotCode: lot.lot_code, skuCode: sku.sku_code, skuName: sku.name, receiveDate: fmtDate(lot.receive_date), label: 'Returned' })}
+      <button class="btn btn-outline btn-block" style="margin-top:var(--s4)" id="btn-print-return-sticker">${icon('printer', 16)}<span>${t('btnPrintSticker')}</span></button>
+    </div>`;
+  QR.renderInto(document.getElementById(`sticker-qr-${lot.lot_code}`), lot.lot_code, 120);
+  document.getElementById('btn-print-return-sticker').addEventListener('click', () => window.print());
 }
 
 // ============================================================================
@@ -564,6 +662,7 @@ function renderIssueStep(lot, openRequests) {
       <div class="card-meta mono">${escapeHtml(lot.lot_code)} · ${escapeHtml(lot.sku_code)}</div>
       <div class="card-row" style="margin-top:var(--s3)">
         <span class="chip chip-cat-${catClass(lot.category)}">${icon(catIcon(lot.category), 12)}${escapeHtml(lot.category)}</span>
+        ${lot.source === 'return' ? `<span class="chip chip-neutral">${icon('repeat', 12)}${escapeHtml(t('returnedLotBadge'))}</span>` : ''}
         <span class="stat-figure" style="font-size:var(--t-card)">${t('unitLeft', fmtQty(lot.balance), escapeHtml(lot.uom))}</span>
       </div>
     </div>

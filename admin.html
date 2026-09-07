@@ -75,40 +75,82 @@
       <div id="stock-list" class="card-list"></div>
     </section>
 
-    <!-- ===================== RECEIVE ===================== -->
+    <!-- ===================== RECEIVE / RETURN ===================== -->
     <section class="view" id="view-receive" hidden>
-      <div class="section-head"><h2 data-i18n="receiveTitle">Receive stock</h2></div>
-      <p class="field-hint" style="margin-bottom:var(--s4)" data-i18n="receiveHint">Log a new batch in. The system will generate a lot ID and QR sticker — print it and stick it on the batch.</p>
+      <div class="section-head"><h2 id="receive-section-title" data-i18n="receiveTitle">Receive stock</h2></div>
 
-      <div id="receive-error"></div>
+      <div class="segmented" id="receive-mode-tabs" role="tablist">
+        <button data-mode="receive" aria-pressed="true" data-icon="package"><span data-i18n="modeReceive">New delivery</span></button>
+        <button data-mode="return" aria-pressed="false" data-icon="repeat"><span data-i18n="modeReturn">Return</span></button>
+      </div>
 
-      <form id="form-receive">
-        <div class="field">
-          <label for="rc-sku" data-i18n="fieldItem">Item</label>
-          <select id="rc-sku" required></select>
-        </div>
-        <div class="field-row">
+      <div id="receive-mode-receive">
+        <p class="field-hint" style="margin-bottom:var(--s4)" data-i18n="receiveHint">Log a new batch in. The system will generate a lot ID and QR sticker — print it and stick it on the batch.</p>
+
+        <div id="receive-error"></div>
+
+        <form id="form-receive">
           <div class="field">
-            <label for="rc-qty" data-i18n="fieldQtyReceived">Quantity received</label>
-            <input type="number" id="rc-qty" min="0.0001" step="any" required>
+            <label for="rc-sku" data-i18n="fieldItem">Item</label>
+            <select id="rc-sku" required></select>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="rc-qty" data-i18n="fieldQtyReceived">Quantity received</label>
+              <input type="number" id="rc-qty" min="0.0001" step="any" required>
+            </div>
+            <div class="field">
+              <label for="rc-uom" data-i18n="fieldUnit">Unit</label>
+              <input type="text" id="rc-uom" placeholder="e.g. bag" required>
+            </div>
           </div>
           <div class="field">
-            <label for="rc-uom" data-i18n="fieldUnit">Unit</label>
-            <input type="text" id="rc-uom" placeholder="e.g. bag" required>
+            <label for="rc-supplier" data-i18n="fieldSupplierRef">Supplier reference (optional)</label>
+            <input type="text" id="rc-supplier" data-i18n-placeholder="fieldSupplierRefPh" placeholder="PO number, delivery note, etc.">
           </div>
-        </div>
-        <div class="field">
-          <label for="rc-supplier" data-i18n="fieldSupplierRef">Supplier reference (optional)</label>
-          <input type="text" id="rc-supplier" data-i18n-placeholder="fieldSupplierRefPh" placeholder="PO number, delivery note, etc.">
-        </div>
-        <div class="field">
-          <label for="rc-by" data-i18n="fieldReceivedBy">Received by</label>
-          <input type="text" id="rc-by" data-i18n-placeholder="fieldReceivedByPh" placeholder="Staff name" required>
-        </div>
-        <button class="btn btn-primary btn-block" type="submit" id="btn-receive-submit" data-icon="qr"><span id="rc-submit-label" data-i18n="btnGenerateLot">Generate lot &amp; QR</span></button>
-      </form>
+          <div class="field">
+            <label for="rc-by" data-i18n="fieldReceivedBy">Received by</label>
+            <input type="text" id="rc-by" data-i18n-placeholder="fieldReceivedByPh" placeholder="Staff name" required>
+          </div>
+          <button class="btn btn-primary btn-block" type="submit" id="btn-receive-submit" data-icon="qr"><span id="rc-submit-label" data-i18n="btnGenerateLot">Generate lot &amp; QR</span></button>
+        </form>
 
-      <div id="receive-result" style="margin-top:var(--s5)"></div>
+        <div id="receive-result" style="margin-top:var(--s5)"></div>
+      </div>
+
+      <div id="receive-mode-return" hidden>
+        <p class="field-hint" style="margin-bottom:var(--s4)" data-i18n="returnHint">Log materials coming back into stock. This creates its own lot and QR sticker, so it can be scanned back out later like any other batch.</p>
+
+        <div id="return-error"></div>
+
+        <form id="form-return">
+          <div class="field">
+            <label for="rt-sku" data-i18n="fieldItem">Item</label>
+            <select id="rt-sku" required></select>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="rt-qty" data-i18n="fieldQtyReturned">Quantity returned</label>
+              <input type="number" id="rt-qty" min="0.0001" step="any" required>
+            </div>
+            <div class="field">
+              <label for="rt-uom" data-i18n="fieldUnit">Unit</label>
+              <input type="text" id="rt-uom" placeholder="e.g. bag" required>
+            </div>
+          </div>
+          <div class="field">
+            <label for="rt-note" data-i18n="fieldReturnNote">Note (optional)</label>
+            <input type="text" id="rt-note" data-i18n-placeholder="fieldReturnNotePh" placeholder="Why it's coming back, condition, etc.">
+          </div>
+          <div class="field">
+            <label for="rt-by" data-i18n="fieldReturnedBy">Returned by</label>
+            <input type="text" id="rt-by" data-i18n-placeholder="fieldReturnedByPh" placeholder="Staff or requester name" required>
+          </div>
+          <button class="btn btn-primary btn-block" type="submit" id="btn-return-submit" data-icon="qr"><span id="rt-submit-label" data-i18n="btnGenerateReturnLot">Generate lot &amp; QR</span></button>
+        </form>
+
+        <div id="return-result" style="margin-top:var(--s5)"></div>
+      </div>
     </section>
 
     <!-- ===================== ISSUE / SCAN ===================== -->

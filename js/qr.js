@@ -25,15 +25,18 @@ const QR = {
   /**
    * Build the printable sticker markup for a lot: QR + human-readable
    * SKU name, lot code, and receive date, sized for a common label printer.
+   * `label` defaults to "Received" (the ordinary receiving flow); the
+   * return flow passes "Returned" instead so a returned lot's sticker
+   * doesn't read as a fresh delivery.
    */
-  stickerHtml({ lotCode, skuCode, skuName, receiveDate }) {
+  stickerHtml({ lotCode, skuCode, skuName, receiveDate, label = 'Received' }) {
     return `
       <div class="sticker">
         <div class="sticker-qr" id="sticker-qr-${lotCode}"></div>
         <div class="sticker-text">
           <div class="sticker-sku">${skuCode} · ${skuName}</div>
           <div class="sticker-lot">${lotCode}</div>
-          <div class="sticker-date">Received ${receiveDate}</div>
+          <div class="sticker-date">${label} ${receiveDate}</div>
         </div>
       </div>`;
   },
