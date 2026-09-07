@@ -23,7 +23,7 @@ const I18N = {
     chipBelowThreshold: (min) => `Below threshold (${min})`,
     emptyStockCategory: 'No SKUs in this category yet.',
     searchStockPlaceholder: 'Search by SKU or name',
-    searchRequestsPlaceholder: 'Search requester, item, or code',
+    searchRequestsPlaceholder: 'Search by request number, requester, department, or date',
     searchReportsPlaceholder: 'Search this report',
     emptySearchResults: (q) => `No results for "${q}".`,
 
@@ -106,6 +106,49 @@ const I18N = {
     toastCategoryCreated: 'Category added',
     errorCategoryExists: 'That category already exists',
 
+    // Landing page
+    landingTitle: 'Warehouse Inventory',
+    landingSubtitle: 'Receiving · Requisition',
+    landingAdminTitle: 'Admin',
+    landingAdminDesc: 'Stock, receiving, scanning, requests, and reports. Staff login required.',
+    landingRequesterTitle: 'Request form',
+    landingRequesterDesc: "Fill out a request and get a reference number — no login needed.",
+
+    // Admin login
+    adminLoginTitle: 'Staff login',
+    fieldPassword: 'Password',
+    btnLogin: 'Log in',
+    btnLogout: 'Log out',
+    errorLoginFailed: 'Incorrect password',
+    loggingIn: 'Logging in…',
+
+    // Public request form
+    requestFormTitle: 'Request form',
+    requestFormIntro: "Fill this out and you'll get a request number to reference with the warehouse team.",
+    fieldRequesterName2: 'Your name',
+    fieldDepartment: 'Department',
+    fieldComment: 'What do you need?',
+    fieldCommentPh: "Describe what you need, how much, and where it's for…",
+    btnSubmitPublicRequest: 'Submit request',
+    submittingRequest: 'Submitting…',
+    requestSubmittedTitle: 'Request submitted',
+    requestSubmittedHint: 'Save or write down this number — the warehouse team will use it to look up your request.',
+    requestNumberLabel: 'Request number',
+    requestSubmittedAt: 'Submitted',
+    btnPrintPdf: 'Print / Save as PDF',
+    btnSubmitAnother: 'Submit another request',
+    backToHome: 'Back to home',
+    errorRequestFailed: 'Could not submit your request',
+
+    // Requests: free-text ("general") requests alongside item requests
+    generalRequest: 'General request',
+    colDepartment: 'Department',
+    colComment: 'Comment',
+    colRequester: 'Requester',
+    colItem: 'Item',
+    reportRequests: 'Requests',
+    noDepartment: '—',
+
     langToggle: 'ไทย',
   },
   th: {
@@ -124,7 +167,7 @@ const I18N = {
     chipBelowThreshold: (min) => `ต่ำกว่าเกณฑ์ (${min})`,
     emptyStockCategory: 'ยังไม่มีสินค้าในหมวดนี้',
     searchStockPlaceholder: 'ค้นหาด้วยรหัส SKU หรือชื่อ',
-    searchRequestsPlaceholder: 'ค้นหาผู้ขอ, สินค้า หรือรหัสคำขอ',
+    searchRequestsPlaceholder: 'ค้นหาด้วยหมายเลขคำขอ ผู้ขอ แผนก หรือวันที่',
     searchReportsPlaceholder: 'ค้นหาในรายงานนี้',
     emptySearchResults: (q) => `ไม่พบผลลัพธ์สำหรับ "${q}"`,
 
@@ -207,6 +250,48 @@ const I18N = {
     toastCategoryCreated: 'เพิ่มหมวดหมู่แล้ว',
     errorCategoryExists: 'มีหมวดหมู่นี้อยู่แล้ว',
 
+    // Landing page
+    landingTitle: 'ระบบคลังวัสดุ',
+    landingSubtitle: 'รับของ · เบิกของ',
+    landingAdminTitle: 'ผู้ดูแลระบบ',
+    landingAdminDesc: 'สต็อก รับของ สแกน คำขอ และรายงาน ต้องเข้าสู่ระบบ',
+    landingRequesterTitle: 'แบบฟอร์มขอเบิก',
+    landingRequesterDesc: 'กรอกแบบฟอร์มขอเบิกและรับหมายเลขอ้างอิง ไม่ต้องเข้าสู่ระบบ',
+
+    // Admin login
+    adminLoginTitle: 'เข้าสู่ระบบเจ้าหน้าที่',
+    fieldPassword: 'รหัสผ่าน',
+    btnLogin: 'เข้าสู่ระบบ',
+    btnLogout: 'ออกจากระบบ',
+    errorLoginFailed: 'รหัสผ่านไม่ถูกต้อง',
+    loggingIn: 'กำลังเข้าสู่ระบบ…',
+
+    // Public request form
+    requestFormTitle: 'แบบฟอร์มขอเบิก',
+    requestFormIntro: 'กรอกแบบฟอร์มนี้เพื่อรับหมายเลขคำขอสำหรับอ้างอิงกับทีมคลังวัสดุ',
+    fieldRequesterName2: 'ชื่อของคุณ',
+    fieldDepartment: 'แผนก',
+    fieldComment: 'ต้องการอะไร',
+    fieldCommentPh: 'อธิบายสิ่งที่ต้องการ จำนวน และสถานที่ใช้งาน…',
+    btnSubmitPublicRequest: 'ส่งคำขอ',
+    submittingRequest: 'กำลังส่ง…',
+    requestSubmittedTitle: 'ส่งคำขอแล้ว',
+    requestSubmittedHint: 'บันทึกหรือจดหมายเลขนี้ไว้ — ทีมคลังวัสดุจะใช้เพื่อค้นหาคำขอของคุณ',
+    requestNumberLabel: 'หมายเลขคำขอ',
+    requestSubmittedAt: 'ส่งเมื่อ',
+    btnPrintPdf: 'พิมพ์ / บันทึกเป็น PDF',
+    btnSubmitAnother: 'ส่งคำขอใหม่',
+    backToHome: 'กลับหน้าแรก',
+    errorRequestFailed: 'ไม่สามารถส่งคำขอได้',
+
+    generalRequest: 'คำขอทั่วไป',
+    colDepartment: 'แผนก',
+    colComment: 'รายละเอียด',
+    colRequester: 'ผู้ขอ',
+    colItem: 'รายการ',
+    reportRequests: 'คำขอ',
+    noDepartment: '—',
+
     langToggle: 'EN',
   },
 };
@@ -232,8 +317,12 @@ const I18n = {
     document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
       el.setAttribute('placeholder', I18n.t(el.dataset.i18nPlaceholder));
     });
-    const toggle = document.getElementById('lang-toggle');
-    if (toggle) toggle.textContent = I18n.t('langToggle');
+    // Target the inner label span, not the button itself — the button also
+    // carries an icon <svg> (via data-icon/applyStaticIcons) as a sibling,
+    // and overwriting the whole button's content would silently wipe it out
+    // on every language switch after the first.
+    const toggleLabel = document.getElementById('lang-toggle-label');
+    if (toggleLabel) toggleLabel.textContent = I18n.t('langToggle');
   },
 };
 

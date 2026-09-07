@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Warehouse Inventory — Request Form</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<div class="app">
+
+  <header class="header">
+    <div>
+      <div class="header-title" data-i18n="requestFormTitle">Request form</div>
+      <div class="header-sub" data-i18n="landingSubtitle">รับของ · เบิกของ</div>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-ghost btn-sm" id="lang-toggle" data-icon="globe" aria-label="Switch language"><span id="lang-toggle-label">EN</span></button>
+    </div>
+  </header>
+
+  <main id="main">
+
+    <!-- ===================== FORM ===================== -->
+    <section class="view" id="view-form">
+      <p class="field-hint" style="margin-bottom:var(--s4)" data-i18n="requestFormIntro">Fill this out and you'll get a request number to reference with the warehouse team.</p>
+
+      <div id="request-error"></div>
+
+      <form id="form-public-request">
+        <div class="field">
+          <label for="req-name" data-i18n="fieldRequesterName2">Your name</label>
+          <input type="text" id="req-name" required>
+        </div>
+        <div class="field">
+          <label for="req-department" data-i18n="fieldDepartment">Department</label>
+          <input type="text" id="req-department" required>
+        </div>
+        <div class="field">
+          <label for="req-comment" data-i18n="fieldComment">What do you need?</label>
+          <textarea id="req-comment" data-i18n-placeholder="fieldCommentPh" placeholder="Describe what you need, how much, and where it's for…" style="min-height:130px" required></textarea>
+        </div>
+        <button class="btn btn-primary btn-block" type="submit" id="req-submit" data-icon="send"><span data-i18n="btnSubmitPublicRequest">Submit request</span></button>
+      </form>
+
+      <a href="index.html" class="field-hint" style="display:block;text-align:center;margin-top:var(--s5)" data-i18n="backToHome">Back to home</a>
+    </section>
+
+    <!-- ===================== CONFIRMATION / PRINT ===================== -->
+    <section class="view" id="view-confirm" hidden>
+      <div class="card confirm-card" id="print-area">
+        <div class="confirm-check" data-icon="checkCircle" data-icon-size="40"></div>
+        <div class="confirm-title" data-i18n="requestSubmittedTitle">Request submitted</div>
+        <p class="field-hint" style="text-align:center" data-i18n="requestSubmittedHint">Save or write down this number — the warehouse team will use it to look up your request.</p>
+        <div class="confirm-code" id="confirm-code">REQ-000000-000</div>
+        <div class="confirm-rows">
+          <div class="confirm-row"><span data-i18n="fieldRequesterName2">Your name</span><strong id="confirm-name"></strong></div>
+          <div class="confirm-row"><span data-i18n="fieldDepartment">Department</span><strong id="confirm-department"></strong></div>
+          <div class="confirm-row"><span data-i18n="requestSubmittedAt">Submitted</span><strong id="confirm-when"></strong></div>
+        </div>
+        <div class="confirm-comment" id="confirm-comment"></div>
+      </div>
+
+      <div class="no-print" style="margin-top:var(--s4)">
+        <button class="btn btn-outline btn-block" id="btn-print" data-icon="printer"><span data-i18n="btnPrintPdf">Print / Save as PDF</span></button>
+        <button class="btn btn-primary btn-block" id="btn-submit-another" style="margin-top:var(--s3)" data-icon="plusCircle"><span data-i18n="btnSubmitAnother">Submit another request</span></button>
+        <a href="index.html" class="field-hint" style="display:block;text-align:center;margin-top:var(--s4)" data-i18n="backToHome">Back to home</a>
+      </div>
+    </section>
+
+  </main>
+
+</div>
+
+<!-- Third-party: Supabase client (create_public_request RPC only) -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script src="js/config.js"></script>
+<script src="js/db.js"></script>
+<script src="js/i18n.js"></script>
+<script src="js/icons.js"></script>
+<script src="js/request.js"></script>
+</body>
+</html>

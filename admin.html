@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Warehouse Inventory — Admin</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<!-- ===================== LOGIN GATE ===================== -->
+<!-- Shown until Auth.getSession() resolves to a signed-in user; RLS enforces
+     the real boundary (see schema.sql) — this is the door, not the lock. -->
+<div class="login-screen" id="login-screen">
+  <div class="login-card">
+    <div class="header-title" data-i18n="appTitle">Warehouse</div>
+    <div class="eyebrow" data-i18n="adminLoginTitle" style="margin-top:var(--s2)">Staff login</div>
+    <div id="login-error"></div>
+    <form id="form-admin-login">
+      <div class="field">
+        <label for="login-password" data-i18n="fieldPassword">Password</label>
+        <input type="password" id="login-password" required autofocus>
+      </div>
+      <button class="btn btn-primary btn-block" type="submit" id="login-submit" data-icon="checkCircle"><span data-i18n="btnLogin">Log in</span></button>
+    </form>
+    <a href="index.html" class="field-hint" style="display:block;text-align:center;margin-top:var(--s4)" data-i18n="backToHome">Back to home</a>
+  </div>
+</div>
+
+<div class="app" id="app-shell" hidden>
+
+  <header class="header">
+    <div>
+      <div class="header-title" data-i18n="appTitle">Warehouse</div>
+      <div class="header-sub" id="header-sub" data-i18n="headerSub">รับของ · เบิกของ</div>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-ghost btn-sm" id="lang-toggle" data-icon="globe" aria-label="Switch language"><span id="lang-toggle-label">EN</span></button>
+      <button class="btn btn-ghost btn-sm" id="btn-refresh" data-icon="refresh" aria-label="Refresh"><span data-i18n="refresh">Refresh</span></button>
+      <button class="btn btn-ghost btn-sm" id="btn-logout" data-icon="xCircle" aria-label="Log out"><span data-i18n="btnLogout">Log out</span></button>
+    </div>
+  </header>
+
+  <main id="main">
+
+    <!-- ===================== STOCK (home) ===================== -->
+    <section class="view" id="view-stock">
+      <div class="card-row" style="margin-bottom:var(--s5)">
+        <div>
+          <div class="stat-label" data-i18n="onHandLabel">On hand · active SKUs</div>
+          <div class="stat-figure" id="stock-total">—</div>
+        </div>
+        <div>
+          <div class="stat-label" data-i18n="belowThresholdLabel">Below threshold</div>
+          <div class="stat-figure" id="stock-low-count" style="color:var(--low)">—</div>
+        </div>
+      </div>
+
+      <div class="card-row" style="margin-bottom:var(--s4)">
+        <span class="eyebrow" style="margin:0" data-i18n="materialsOnHand">Materials on hand</span>
+        <button class="btn btn-outline btn-sm" id="btn-manage-items" data-icon="sliders"><span data-i18n="manageItems">Manage items</span></button>
+      </div>
+
+      <div class="search-wrap" data-icon="search">
+        <input type="search" class="search-input" id="stock-search" data-i18n-placeholder="searchStockPlaceholder" placeholder="Search by SKU or name">
+      </div>
+
+      <div class="facets" id="stock-facets" role="group" aria-label="Filter by category"></div>
+
+      <div id="stock-list" class="card-list"></div>
+    </section>
+
+    <!-- ===================== RECEIVE ===================== -->
+    <section class="view" id="view-receive" hidden>
+      <div class="section-head"><h2 data-i18n="receiveTitle">Receive stock</h2></div>
+      <p class="field-hint" style="margin-bottom:var(--s4)" data-i18n="receiveHint">Log a new batch in. The system will generate a lot ID and QR sticker — print it and stick it on the batch.</p>
+
+      <div id="receive-error"></div>
+
+      <form id="form-receive">
+        <div class="field">
+          <label for="rc-sku" data-i18n="fieldItem">Item</label>
+          <select id="rc-sku" required></select>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="rc-qty" data-i18n="fieldQtyReceived">Quantity received</label>
+            <input type="number" id="rc-qty" min="0.0001" step="any" required>
+          </div>
+          <div class="field">
+            <label for="rc-uom" data-i18n="fieldUnit">Unit</label>
+            <input type="text" id="rc-uom" placeholder="e.g. bag" required>
+          </div>
+        </div>
+        <div class="field">
+          <label for="rc-supplier" data-i18n="fieldSupplierRef">Supplier reference (optional)</label>
+          <input type="text" id="rc-supplier" data-i18n-placeholder="fieldSupplierRefPh" placeholder="PO number, delivery note, etc.">
+        </div>
+        <div class="field">
+          <label for="rc-by" data-i18n="fieldReceivedBy">Received by</label>
+          <input type="text" id="rc-by" data-i18n-placeholder="fieldReceivedByPh" placeholder="Staff name" required>
+        </div>
+        <button class="btn btn-primary btn-block" type="submit" id="btn-receive-submit" data-icon="qr"><span id="rc-submit-label" data-i18n="btnGenerateLot">Generate lot &amp; QR</span></button>
+      </form>
+
+      <div id="receive-result" style="margin-top:var(--s5)"></div>
+    </section>
+
+    <!-- ===================== ISSUE / SCAN ===================== -->
+    <section class="view" id="view-issue" hidden>
+      <div class="section-head"><h2 data-i18n="scanTitle">Scan to issue</h2></div>
+
+      <div id="scan-step-camera">
+        <div class="scan-frame">
+          <video id="scan-video" playsinline muted></video>
+          <div class="reticle"></div>
+        </div>
+        <canvas id="scan-canvas" hidden></canvas>
+        <p class="scan-note" id="scan-status" data-i18n="scanHintDefault">Point the camera at the lot's QR sticker to scan it, or enter the lot code below.</p>
+        <div class="field">
+          <label for="scan-manual" data-i18n="fieldLotCode">Lot code</label>
+          <input type="text" id="scan-manual" placeholder="e.g. CEM-001-260906-001" autocapitalize="characters">
+        </div>
+        <button class="btn btn-outline btn-block" id="btn-lookup-lot" data-icon="search"><span data-i18n="btnLookupLot">Look up lot</span></button>
+      </div>
+
+      <div id="scan-step-issue" hidden></div>
+    </section>
+
+    <!-- ===================== REQUESTS ===================== -->
+    <section class="view" id="view-requests" hidden>
+      <div class="section-head">
+        <h2 data-i18n="requestsTitle">Requests</h2>
+        <button class="btn btn-primary btn-sm" id="btn-new-request" data-icon="plusCircle" data-icon-size="14"><span data-i18n="btnNewRequest">+ New</span></button>
+      </div>
+
+      <div class="search-wrap" data-icon="search">
+        <input type="search" class="search-input" id="request-search" data-i18n-placeholder="searchRequestsPlaceholder" placeholder="Search requester, item, or code">
+      </div>
+
+      <div class="segmented" id="request-status-tabs" role="tablist"></div>
+
+      <div id="requests-list" class="card-list"></div>
+    </section>
+
+    <!-- ===================== REPORTS ===================== -->
+    <section class="view" id="view-reports" hidden>
+      <div class="section-head"><h2 data-i18n="reportsTitle">Reports</h2></div>
+
+      <div class="search-wrap" data-icon="search">
+        <input type="search" class="search-input" id="report-search" data-i18n-placeholder="searchReportsPlaceholder" placeholder="Search this report">
+      </div>
+
+      <div class="segmented" id="report-tabs" role="tablist">
+        <button data-report="stock" aria-pressed="true" data-icon="barChart"><span data-i18n="reportStock">Stock</span></button>
+        <button data-report="movement" aria-pressed="false" data-icon="swap"><span data-i18n="reportMovement">Movement</span></button>
+        <button data-report="requests" aria-pressed="false" data-icon="list"><span data-i18n="reportRequests">Requests</span></button>
+        <button data-report="discrepancy" aria-pressed="false" data-icon="alertTriangle"><span data-i18n="reportDiscrepancy">Discrepancies</span></button>
+        <button data-report="lowstock" aria-pressed="false" data-icon="trendingDown"><span data-i18n="reportLowStock">Low stock</span></button>
+      </div>
+
+      <div id="report-body"></div>
+    </section>
+
+  </main>
+
+  <nav class="tabbar" aria-label="Primary">
+    <button data-view="stock" aria-current="page">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M3 9.5 12 4l9 5.5V19a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1V9.5Z"/></svg>
+      <span data-i18n="tabStock">Stock</span>
+    </button>
+    <button data-view="receive">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M4 7v11a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V7"/><path d="M2 7l2.5-4h15L22 7"/><path d="M2 7h20"/><path d="M9 11h6"/></svg>
+      <span data-i18n="tabReceive">Receive</span>
+    </button>
+    <button data-view="issue">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v3M14 20h3M20 20h.01"/></svg>
+      <span data-i18n="tabIssue">Scan</span>
+    </button>
+    <button data-view="requests">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>
+      <span data-i18n="tabRequests">Requests</span>
+    </button>
+    <button data-view="reports">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>
+      <span data-i18n="tabReports">Reports</span>
+    </button>
+  </nav>
+
+</div>
+
+<div class="scrim" id="scrim" hidden>
+  <div class="sheet" id="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-head">
+      <h3 id="sheet-title"></h3>
+      <button class="sheet-close" id="sheet-close" aria-label="Close">✕</button>
+    </div>
+    <div id="sheet-body"></div>
+  </div>
+</div>
+
+<div id="toast-host"></div>
+
+<!-- Third-party: Supabase client, QR generation, QR scanning -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.js"></script>
+
+<script src="js/config.js"></script>
+<script src="js/db.js"></script>
+<script src="js/qr.js"></script>
+<script src="js/i18n.js"></script>
+<script src="js/icons.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

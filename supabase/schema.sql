@@ -5,11 +5,14 @@
 -- Run this once in the Supabase SQL Editor (Project → SQL Editor → New query),
 -- or via `supabase db push` if you're using the CLI.
 --
--- v1 note on security: Row Level Security is enabled but the policies below
--- grant full access to the anon key. That's appropriate for a first version
--- used internally by trusted staff on a private link. Before this goes out to
--- more people or the public internet, replace these policies with ones scoped
--- to Supabase Auth roles (requester / staff / admin) — see README.md.
+-- v2 note on security: the public requester form (request.html) is meant to
+-- be reachable by anyone with the link, with no login. Everything else
+-- (admin.html — stock, receiving, scanning, requests management, reports)
+-- requires signing in through Supabase Auth first. Row Level Security below
+-- enforces this at the database level, not just in the UI: the anon key can
+-- only INSERT into requests (via create_public_request()); every other
+-- table, and every other operation on requests, requires the "authenticated"
+-- role. See README.md for how to create the shared admin login.
 -- ============================================================================
 
 create extension if not exists pgcrypto;
@@ -95,8 +98,8 @@ create table if not exists requests (
   id              uuid primary key default gen_random_uuid(),
   request_code    text unique not null,
   requester_name  text not null,
-  sku_id          uuid not null references skus(id) on delete restrict,
-  qty_requested   numeric not null check (qty_requested > 0),
+  sku_id          uuid references skus(id) on delete restrict,
+  qty_requested   numeric check (qty_requested > 0),
   needed_by       date,
   notes           text,
   status          text not null default 'pending'
@@ -111,6 +114,24 @@ create index if not exists requests_sku_id_idx on requests(sku_id);
 -- is closed, from the same name typed into the "picked up by" field on the
 -- issue screen. Nullable: only fulfilled requests will have one.
 alter table requests add column if not exists picked_up_by text;
+
+-- The public requester form (no login, no item picker — see
+-- create_public_request() below) collects who's asking and which
+-- department to charge back to, then a free-text description in `notes`.
+-- sku_id/qty_requested are nullable so this "general" kind of request can
+-- coexist with the original item+quantity kind staff create internally —
+-- one requests table, one admin view, told apart by whether sku_id is set.
+alter table requests add column if not exists department text;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'requests_item_or_note_chk'
+  ) then
+    alter table requests
+      add constraint requests_item_or_note_chk check (sku_id is not null or notes is not null);
+  end if;
+end $$;
 
 -- ----------------------------------------------------------------------------
 -- 4. Transactions — every receive / issue event (the movement ledger)
@@ -167,6 +188,15 @@ create table if not exists lot_sequences (
 -- ----------------------------------------------------------------------------
 create table if not exists sku_sequences (
   prefix    text primary key,
+  last_seq  integer not null default 0
+);
+
+-- ----------------------------------------------------------------------------
+-- 5d. Request numbering — the public requester form's request_code, same
+--     per-day running-counter pattern as lot_sequences: REQ-YYMMDD-NNN.
+-- ----------------------------------------------------------------------------
+create table if not exists request_sequences (
+  seq_date  date primary key,
   last_seq  integer not null default 0
 );
 
@@ -375,12 +405,78 @@ begin
 end;
 $$;
 
-grant execute on function receive_stock(uuid, numeric, text, text, text) to anon, authenticated;
-grant execute on function issue_stock(uuid, uuid, numeric, text) to anon, authenticated;
-grant execute on function create_sku(text, text, text, text, numeric, numeric) to anon, authenticated;
+-- The public requester form: no login, no item/quantity — just who's
+-- asking, their department, and a free-text description. request_code is
+-- assigned the same way lot_code is: an atomic per-day running counter, so
+-- concurrent public submissions still get distinct, gap-free numbers.
+-- security definer: anon can INSERT into requests but (by design) has no
+-- SELECT policy on it, so a plain "returning *" as anon would itself be
+-- blocked by RLS (RETURNING acts like a SELECT of the new row). Running as
+-- the function owner — who owns the table and so bypasses its RLS — lets
+-- this one narrow, parameter-controlled insert hand back the new row
+-- (with its request_code) without opening general read access to anon.
+create or replace function create_public_request(
+  p_requester_name text, p_department text, p_comment text
+) returns requests
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_seq int;
+  v_code text;
+  v_request requests;
+begin
+  if coalesce(trim(p_requester_name), '') = '' then
+    raise exception 'Requester name is required';
+  end if;
+  if coalesce(trim(p_comment), '') = '' then
+    raise exception 'Please describe what you need';
+  end if;
+
+  insert into request_sequences (seq_date, last_seq)
+  values (current_date, 1)
+  on conflict (seq_date) do update set last_seq = request_sequences.last_seq + 1
+  returning last_seq into v_seq;
+
+  v_code := 'REQ-' || to_char(current_date, 'YYMMDD') || '-' || lpad(v_seq::text, 3, '0');
+
+  insert into requests (request_code, requester_name, department, notes)
+  values (v_code, trim(p_requester_name), nullif(trim(p_department), ''), trim(p_comment))
+  returning * into v_request;
+
+  return v_request;
+end;
+$$;
+
+-- Postgres grants EXECUTE on a new function to PUBLIC by default — revoking
+-- from just "anon" is not enough to lock an admin-only function down, since
+-- PUBLIC still covers it. Revoke PUBLIC explicitly, then grant only to the
+-- roles that should actually have it.
+revoke execute on function receive_stock(uuid, numeric, text, text, text) from public;
+revoke execute on function issue_stock(uuid, uuid, numeric, text) from public;
+revoke execute on function create_sku(text, text, text, text, numeric, numeric) from public;
+revoke execute on function create_public_request(text, text, text) from public;
+
+grant execute on function receive_stock(uuid, numeric, text, text, text) to authenticated;
+grant execute on function issue_stock(uuid, uuid, numeric, text) to authenticated;
+grant execute on function create_sku(text, text, text, text, numeric, numeric) to authenticated;
+grant execute on function create_public_request(text, text, text) to anon, authenticated;
 
 -- ----------------------------------------------------------------------------
--- 8. Row Level Security (v1: open to anon — see note at top of file)
+-- 8. Row Level Security
+--
+-- v2: the requester form is genuinely public (no login), so from here on
+-- "anon" means an anonymous member of the public, not trusted staff. Every
+-- table except requests drops anon access entirely and is readable/writable
+-- only by "authenticated" — i.e. someone who has signed in through the admin
+-- login screen (see js/db.js Auth.signIn / README). requests itself splits
+-- in two: anyone can INSERT (submit a request — always through
+-- create_public_request(), never a raw insert with attacker-chosen fields
+-- beyond requester_name/department/notes), but only authenticated can
+-- SELECT/UPDATE/DELETE, so the public can't browse, search, or edit anyone
+-- else's requests. request_sequences is the one sequence table anon still
+-- needs, since create_public_request() has to bump it.
 -- ----------------------------------------------------------------------------
 alter table skus enable row level security;
 alter table lots enable row level security;
@@ -390,30 +486,44 @@ alter table discrepancies enable row level security;
 alter table lot_sequences enable row level security;
 alter table sku_sequences enable row level security;
 alter table categories enable row level security;
+alter table request_sequences enable row level security;
 
 drop policy if exists "anon full access - skus" on skus;
-create policy "anon full access - skus" on skus for all using (true) with check (true);
+drop policy if exists "authenticated full access - skus" on skus;
+create policy "authenticated full access - skus" on skus for all to authenticated using (true) with check (true);
 
 drop policy if exists "anon full access - categories" on categories;
-create policy "anon full access - categories" on categories for all using (true) with check (true);
+drop policy if exists "authenticated full access - categories" on categories;
+create policy "authenticated full access - categories" on categories for all to authenticated using (true) with check (true);
 
 drop policy if exists "anon full access - lots" on lots;
-create policy "anon full access - lots" on lots for all using (true) with check (true);
+drop policy if exists "authenticated full access - lots" on lots;
+create policy "authenticated full access - lots" on lots for all to authenticated using (true) with check (true);
 
 drop policy if exists "anon full access - requests" on requests;
-create policy "anon full access - requests" on requests for all using (true) with check (true);
+drop policy if exists "anyone can submit requests" on requests;
+drop policy if exists "authenticated full access - requests" on requests;
+create policy "anyone can submit requests" on requests for insert to anon, authenticated with check (true);
+create policy "authenticated full access - requests" on requests for all to authenticated using (true) with check (true);
 
 drop policy if exists "anon full access - transactions" on transactions;
-create policy "anon full access - transactions" on transactions for all using (true) with check (true);
+drop policy if exists "authenticated full access - transactions" on transactions;
+create policy "authenticated full access - transactions" on transactions for all to authenticated using (true) with check (true);
 
 drop policy if exists "anon full access - discrepancies" on discrepancies;
-create policy "anon full access - discrepancies" on discrepancies for all using (true) with check (true);
+drop policy if exists "authenticated full access - discrepancies" on discrepancies;
+create policy "authenticated full access - discrepancies" on discrepancies for all to authenticated using (true) with check (true);
 
 drop policy if exists "anon full access - lot_sequences" on lot_sequences;
-create policy "anon full access - lot_sequences" on lot_sequences for all using (true) with check (true);
+drop policy if exists "authenticated full access - lot_sequences" on lot_sequences;
+create policy "authenticated full access - lot_sequences" on lot_sequences for all to authenticated using (true) with check (true);
 
 drop policy if exists "anon full access - sku_sequences" on sku_sequences;
-create policy "anon full access - sku_sequences" on sku_sequences for all using (true) with check (true);
+drop policy if exists "authenticated full access - sku_sequences" on sku_sequences;
+create policy "authenticated full access - sku_sequences" on sku_sequences for all to authenticated using (true) with check (true);
+
+drop policy if exists "anyone can bump request_sequences" on request_sequences;
+create policy "anyone can bump request_sequences" on request_sequences for all to anon, authenticated using (true) with check (true);
 
 -- ----------------------------------------------------------------------------
 -- 9. Seed data — a handful of construction-material SKUs so the app has

@@ -681,8 +681,12 @@ function renderRequestsList() {
     (r.requester_name || '').toLowerCase().includes(q) ||
     (r.picked_up_by || '').toLowerCase().includes(q) ||
     (r.request_code || '').toLowerCase().includes(q) ||
+    (r.department || '').toLowerCase().includes(q) ||
+    (r.notes || '').toLowerCase().includes(q) ||
     (r.skus?.name || '').toLowerCase().includes(q) ||
-    (r.skus?.sku_code || '').toLowerCase().includes(q)
+    (r.skus?.sku_code || '').toLowerCase().includes(q) ||
+    (r.created_at || '').slice(0, 10).includes(q) ||
+    fmtDate(r.created_at).toLowerCase().includes(q)
   ) : requestRows;
 
   if (!rows.length) {
@@ -695,22 +699,31 @@ function renderRequestsList() {
     document.getElementById('empty-new-request')?.addEventListener('click', openNewRequestSheet);
     return;
   }
-  list.innerHTML = rows.map((r) => `
+  list.innerHTML = rows.map((r) => {
+    const isGeneral = !r.sku_id; // submitted through the public requester form — no item/qty, just a comment
+    const title = isGeneral ? (r.department ? escapeHtml(r.department) : t('generalRequest')) : escapeHtml(r.skus?.name || 'Unknown item');
+    const meta = isGeneral
+      ? escapeHtml(r.requester_name)
+      : `${escapeHtml(r.requester_name)} · ${fmtQty(r.qty_requested)} ${escapeHtml(r.skus?.base_uom || '')}`;
+    const whenLine = isGeneral ? fmtDateTime(r.created_at) : t('neededBy', fmtDate(r.needed_by));
+    return `
     <div class="card">
       <div class="card-row">
         <div>
-          <div class="card-title">${escapeHtml(r.skus?.name || 'Unknown item')}</div>
-          <div class="card-meta">${escapeHtml(r.requester_name)} · ${fmtQty(r.qty_requested)} ${escapeHtml(r.skus?.base_uom || '')}</div>
+          <div class="card-title">${title}</div>
+          <div class="card-meta">${meta}</div>
         </div>
         <span class="chip ${statusChipClass(r.status)}">${statusLabel(r.status)}</span>
       </div>
+      ${isGeneral && r.notes ? `<div class="card-meta" style="margin-top:var(--s2)">${escapeHtml(r.notes)}</div>` : ''}
       <div class="card-row" style="margin-top:var(--s3)">
-        <span class="card-meta mono">${escapeHtml(r.request_code)} · ${t('neededBy', fmtDate(r.needed_by))}</span>
+        <span class="card-meta mono">${escapeHtml(r.request_code)} · ${whenLine}</span>
         ${nextStatusButton(r)}
       </div>
       ${r.status === 'fulfilled' && r.picked_up_by ? `<div class="card-meta" style="margin-top:var(--s2)">${escapeHtml(t('pickedUpBy', r.picked_up_by))}</div>` : ''}
     </div>
-  `).join('');
+  `;
+  }).join('');
   list.querySelectorAll('[data-advance]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       try {
@@ -826,6 +839,7 @@ async function loadReport(kind) {
   try {
     if (kind === 'stock') reportRawRows = await DB.stockBySku();
     else if (kind === 'movement') reportRawRows = await DB.movementHistory();
+    else if (kind === 'requests') reportRawRows = await DB.listRequests();
     else if (kind === 'discrepancy') reportRawRows = await DB.discrepancyReport();
     else if (kind === 'lowstock') reportRawRows = await DB.lowStock();
     renderReportTable(kind);
@@ -835,12 +849,31 @@ async function loadReport(kind) {
   }
 }
 
+// requests rows are joined (r.skus.name, not a flat sku_name) and need a
+// couple of derived fields, so they get their own filter here rather than
+// going through the flat-field reportSearchFields() path.
+function filterRequestsReport(allRows, q) {
+  if (!q) return allRows;
+  return allRows.filter((r) =>
+    (r.requester_name || '').toLowerCase().includes(q) ||
+    (r.department || '').toLowerCase().includes(q) ||
+    (r.notes || '').toLowerCase().includes(q) ||
+    (r.request_code || '').toLowerCase().includes(q) ||
+    (r.skus?.name || '').toLowerCase().includes(q) ||
+    (r.skus?.sku_code || '').toLowerCase().includes(q) ||
+    (r.created_at || '').slice(0, 10).includes(q) ||
+    fmtDate(r.created_at).toLowerCase().includes(q)
+  );
+}
+
 function renderReportTable(kind) {
   const body = document.getElementById('report-body');
   const allRows = reportRawRows;
   const q = reportSearch.trim().toLowerCase();
   const fields = reportSearchFields(kind);
-  const rows = q ? allRows.filter((r) => fields.some((f) => String(r[f] ?? '').toLowerCase().includes(q))) : allRows;
+  const rows = kind === 'requests'
+    ? filterRequestsReport(allRows, q)
+    : (q ? allRows.filter((r) => fields.some((f) => String(r[f] ?? '').toLowerCase().includes(q))) : allRows);
 
   if (q && !rows.length) {
     body.innerHTML = `<div class="empty"><p>${t('emptySearchResults', escapeHtml(reportSearch.trim()))}</p></div>`;
@@ -849,6 +882,7 @@ function renderReportTable(kind) {
   if (!allRows.length) {
     if (kind === 'discrepancy') { body.innerHTML = `<div class="empty"><p>${t('emptyDiscrepancies')}</p></div>`; return; }
     if (kind === 'lowstock') { body.innerHTML = `<div class="empty"><p>${t('emptyLowStock')}</p></div>`; return; }
+    if (kind === 'requests') { body.innerHTML = `<div class="empty"><p>${t('emptyGeneric')}</p></div>`; return; }
   }
 
   if (kind === 'stock') {
@@ -877,6 +911,16 @@ function renderReportTable(kind) {
       [t('colSku'), t('colName'), t('colCategory'), t('colOnHand'), t('colThreshold')],
       rows.map((r) => [r.sku_code, r.name, r.category, `<span class="num">${fmtQty(r.on_hand)} ${r.base_uom}</span>`, `<span class="num">${fmtQty(r.min_threshold)}</span>`]),
     );
+  } else if (kind === 'requests') {
+    body.innerHTML = tableHtml(
+      [t('colWhen'), t('colRequest'), t('colRequester'), t('colDepartment'), t('colItem'), t('colComment'), t('colStatus')],
+      rows.map((r) => [
+        fmtDateTime(r.created_at), r.request_code, r.requester_name, r.department || t('noDepartment'),
+        r.skus ? `${r.skus.sku_code} — ${r.skus.name}${r.qty_requested ? ` (${fmtQty(r.qty_requested)} ${r.skus.base_uom || ''})` : ''}` : t('generalRequest'),
+        r.notes || '—',
+        `<span class="chip ${statusChipClass(r.status)}">${statusLabel(r.status)}</span>`,
+      ]),
+    );
   }
 }
 
@@ -888,13 +932,71 @@ function tableHtml(headers, rows) {
   </table></div>`;
 }
 
+// ============================================================================
+// AUTH GATE — admin.html only. Nothing under DB.* will actually return data
+// for an unauthenticated caller (Row Level Security enforces that at the
+// database itself, see schema.sql), so this gate is about presenting the
+// right screen, not the real security boundary.
+// ============================================================================
+let appBooted = false;
+
+async function initApp() {
+  if (appBooted) return;
+  appBooted = true;
+  try {
+    activeSkus = await DB.listSkus({ activeOnly: true });
+  } catch (_) { /* stock view will surface the error */ }
+  showView('stock');
+}
+
+function showLoginScreen() {
+  document.getElementById('login-screen').hidden = false;
+  document.getElementById('app-shell').hidden = true;
+}
+
+function showAppShell() {
+  document.getElementById('login-screen').hidden = true;
+  document.getElementById('app-shell').hidden = false;
+  initApp();
+}
+
+async function refreshAuthUi() {
+  let session = null;
+  try {
+    session = await Auth.getSession();
+  } catch (_) { /* treat as signed out */ }
+  if (session) showAppShell();
+  else showLoginScreen();
+}
+
+document.getElementById('form-admin-login').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const errEl = document.getElementById('login-error');
+  errEl.innerHTML = '';
+  const btn = document.getElementById('login-submit');
+  const password = document.getElementById('login-password').value;
+  btn.disabled = true;
+  try {
+    await Auth.signIn(password);
+    document.getElementById('login-password').value = '';
+    await refreshAuthUi();
+  } catch (err) {
+    errEl.innerHTML = `<div class="form-error">${escapeHtml(t('errorLoginFailed'))}</div>`;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.getElementById('btn-logout').addEventListener('click', async () => {
+  await Auth.signOut();
+  appBooted = false;
+  await refreshAuthUi();
+});
+
 // ---- Boot ------------------------------------------------------------------------
 (async function init() {
   document.documentElement.lang = I18n.current;
   I18n.applyStatic();
   applyStaticIcons();
-  try {
-    activeSkus = await DB.listSkus({ activeOnly: true });
-  } catch (_) { /* stock view will surface the error */ }
-  showView('stock');
+  await refreshAuthUi();
 })();

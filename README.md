@@ -1,4 +1,4 @@
-# Warehouse Inventory — v1
+# Warehouse Inventory — v2
 
 QR-code receiving and requisition for a construction-materials warehouse.
 Built to match `functional_spec` (SKU/lot/QR receiving, scan-to-issue with
@@ -11,18 +11,29 @@ auto-generated API). No build step — open `index.html` and it runs.
 Bilingual (Thai/English, switch top-right), responsive from phone through
 tablet.
 
+**Three pages, two audiences.** `index.html` is a small landing page with two
+buttons: **Request form** (public, no login — anyone with the link can submit
+a request and get a reference number) and **Admin** (`admin.html` — Stock,
+Receive, Scan, Requests, Reports; requires staff login). Row Level Security
+in the database enforces this split for real, not just in the UI — see
+"Public form vs. admin login" below.
+
 ## Setup (one time)
 
 1. **Run the schema.** Open your Supabase project → SQL Editor → New query,
    paste the contents of `supabase/schema.sql`, and run it. This creates the
-   tables, the two atomic RPCs (`receive_stock`, `issue_stock`), the report
-   views, and seeds five sample construction-material SKUs so the app has
-   something real to show immediately. The file is safe to re-run against a
-   database that already has data — every statement is idempotent (tested
-   against a real Postgres instance, including a second full re-run against
-   populated tables). If you ran an earlier version of this schema, re-running
-   the current file picks up the newer lot-numbering scheme and the
-   `picked_up_by` column on `requests` without losing anything.
+   tables, the atomic RPCs (`receive_stock`, `issue_stock`, `create_sku`,
+   `create_public_request`), the report views, the Row Level Security
+   policies that split public vs. admin access (see "Public form vs. admin
+   login" below), and seeds five sample construction-material SKUs plus the
+   ten starting categories so the app has something real to show
+   immediately. The file is safe to re-run against a database that already
+   has data — every statement is idempotent (tested against a real Postgres
+   instance, including a second full re-run against populated tables). If
+   you ran an earlier version of this schema, re-running the current file
+   picks up everything added since — lot numbering, `picked_up_by`,
+   categories, system-generated SKU codes, and the public/admin RLS split —
+   without losing anything.
 2. **(Optional) Load the demo catalog.** `supabase/seed_mockup_100.sql` adds
    ~100 more realistic Thai-named items — construction materials plus
    hotel-facilities stock (electrical, sanitary ware, paint, lumber, cleaning
@@ -33,12 +44,23 @@ tablet.
    seed, and re-running it is a no-op. Delete rows you don't want from the
    Supabase table editor, or skip this file entirely for a clean start — it's
    optional. (Regenerate or edit the list from `scripts/gen_mockup_seed.py`.)
-3. **Credentials are already wired up** in `js/config.js` (your project URL
+3. **Create the shared admin login, once.** Admin access is real Supabase
+   Auth under the hood, but the app only ever asks staff for a password — the
+   email is a fixed, non-mailbox identifier the app already knows
+   (`admin@warehouse.local`), not something anyone types in. In your Supabase
+   project: **Authentication → Users → Add user**, email
+   `admin@warehouse.local`, pick a password, and toggle **Auto Confirm User**
+   on (so it doesn't wait on a confirmation email that will never arrive).
+   Share that password with whoever should reach `admin.html`; anyone without
+   it only ever sees the login screen, and the database itself (not just the
+   UI) refuses every admin query without it — see "Public form vs. admin
+   login" below. Change the password any time from that same Users screen.
+4. **Credentials are already wired up** in `js/config.js` (your project URL
    and anon/publishable key). If you ever rotate the anon key, update it
    there — never put the `service_role` key in this file, it bypasses Row
    Level Security entirely and this file ships to every browser that loads
    the app.
-4. **Open the app.** Double-clicking `index.html` works for a first look, but
+5. **Open the app.** Double-clicking `index.html` works for a first look, but
    the camera scanner needs a "secure context" (HTTPS or `localhost`), so for
    real use serve it locally instead:
    ```
@@ -50,10 +72,30 @@ tablet.
    ```
    then open `http://localhost:8080` (or `http://localhost:5000` for
    `serve`) — camera access will work there but not from a plain `file://`
-   URL in most browsers.
+   URL in most browsers. `index.html` is the landing page; share
+   `request.html` directly if you want a link that skips straight to the
+   request form (e.g. on a poster or an intranet page).
 
-## What's in v1
+## What's in v2
 
+- **Landing page** (`index.html`) — two buttons, Request form and Admin.
+  Nothing else lives here; it doesn't talk to the database at all.
+- **Public request form** (`request.html`) — no login. Name, department, and
+  a free-text comment for what's needed; submitting hands back a request
+  number (`REQ-YYMMDD-NNN`, assigned atomically by the database, same
+  pattern as lot and SKU codes) to write down or reference later. The
+  confirmation screen has a **Print / Save as PDF** button (the browser's own
+  print dialog, saved as a PDF from there) so a requester can keep a copy
+  without needing to be logged in to anything. These "general" requests land
+  in the same `requests` table and the same admin Requests tab as the
+  item-based requests staff create internally — one pipeline, told apart by
+  whether an item was picked (department + comment shown instead of item +
+  quantity).
+- **Admin login** (`admin.html`) — a single shared password gates the whole
+  admin app (Stock, Receive, Scan, Requests, Reports). It's real Supabase
+  Auth underneath (see Setup step 3), so this isn't just a UI curtain: Row
+  Level Security refuses admin data to anyone who hasn't signed in, at the
+  database level.
 - **Stock** — current on-hand quantity per SKU (summed across all lots),
   filterable by category and searchable by SKU code or name, with a
   low-stock flag driven by each SKU's threshold. A "Manage items" button
@@ -76,14 +118,19 @@ tablet.
   accepting it or blocking the transaction — see the Discrepancies report.
   Whoever is picking the order up types their name here; it's recorded as
   the request's `picked_up_by`.
-- **Requests** — submit a request (who's asking, what, how much, needed by),
-  and move it through pending → preparing → ready → fulfilled. A fulfilled
-  request shows both who asked for it (`requester_name`) and who actually
-  picked it up (`picked_up_by`, captured at the Scan step) — they're often
-  different people, and now the system keeps both. Searchable by requester,
-  picker, item, or request code.
-- **Reports** — Stock, Movement history, Discrepancies, Low stock — each
-  searchable across its columns (SKU, name, lot code, who performed it, etc).
+- **Requests** — submit an item-based request internally (who's asking, what,
+  how much, needed by) or receive one through the public form, and move
+  either kind through pending → preparing → ready → fulfilled. A fulfilled
+  item request shows both who asked for it (`requester_name`) and who
+  actually picked it up (`picked_up_by`, captured at the Scan step) — they're
+  often different people, and now the system keeps both. Searchable by
+  requester, department, picker, item, request number, or date (either
+  `2026-09-06` or however your browser formats it) — this doubles as how
+  admin looks up a request someone quotes over the phone.
+- **Reports** — Stock, Movement history, Requests (who requested what, from
+  which department, when, and its status — the public form's comment shows
+  here too), Discrepancies, Low stock — each searchable across its columns
+  (SKU, name, lot code, who performed it, requester, date, etc).
 - **Thai / English** — every screen switches with the toggle next to Refresh
   (top right); the choice is remembered per browser. Thai is the default
   language, since day-to-day warehouse staff are the primary users.
@@ -102,16 +149,22 @@ tablet.
 
 ## Scope decisions worth knowing about
 
-- **No login yet.** Every screen is open to anyone with the link, and
-  "picked up by" / "requester name" are free-text fields rather than
-  authenticated identities — so they're a record of what staff typed, not a
-  cryptographic guarantee of who did what. Row Level Security is enabled in
-  the schema but the policies currently grant the anon key full access.
-  Before more people than your own staff can reach this, or before it's
-  reachable from the open internet, the natural next step is Supabase Auth
-  with role-scoped policies (Requester / Staff / Admin, matching the spec's
-  User entity) — the schema is already shaped to make that a policy change
-  rather than a redesign.
+- **Public form vs. admin login.** `request.html` is meant to be reachable by
+  anyone with the link, with no login — so the database, not just the app,
+  treats it that way. The anon key (visible to anyone, since it ships in
+  `js/config.js` to every browser) can do exactly one thing: insert a new row
+  into `requests`, and only through the `create_public_request()` function,
+  which only accepts a name/department/comment — it can't read, edit, or
+  delete anything, including the row it just created. Every other table, and
+  every other operation on `requests` (search, status changes, fulfillment),
+  requires the "authenticated" role, which only exists after `Auth.signIn()`
+  succeeds against the one shared admin account (Setup step 3). "Picked up
+  by" / "requester name" stay free-text fields rather than per-person
+  identities even for logged-in staff — so within the admin side, they're
+  still a record of what someone typed, not a cryptographic guarantee of who
+  did what. Moving to per-staff accounts (Requester / Staff / Admin roles,
+  matching the spec's User entity) is a further policy change, not a
+  redesign — the shared-login groundwork is already in place.
 - **Unit conversion is stored, not yet enforced in the UI.** `alt_uom` and
   `conversion_factor` exist on each SKU, but Receive and Issue currently work
   in the SKU's base unit only. Wiring the conversion into the receive form
@@ -125,15 +178,18 @@ tablet.
 ## Files
 
 ```
-index.html                     the whole app shell (5 tabs + a bottom sheet for forms)
+index.html                     landing page — Request form / Admin, nothing else
+admin.html                     the admin app shell (5 tabs + a bottom sheet for forms) behind login
+request.html                   the public request form + printable confirmation
 css/tokens.css                 design tokens — colour, type, spacing (nothing raw in app.css)
 css/app.css                    components
 js/config.js                   Supabase URL + anon key
-js/db.js                       every Supabase call the app makes
+js/db.js                       every Supabase call the app makes, incl. Auth.signIn/signOut
 js/qr.js                       QR generation (sticker) + camera scanning
 js/i18n.js                     Thai/English dictionary, t() lookup, language switching
 js/icons.js                    shared inline-SVG icon set (icon(name), catIcon(category))
-js/app.js                      view router and UI wiring
+js/app.js                      admin.html's view router, auth gate, and UI wiring
+js/request.js                  request.html's own small, standalone script
 supabase/schema.sql            tables, views, RPCs, RLS policies, 5-item seed
 supabase/seed_mockup_100.sql   optional ~100-item Thai demo catalog (see Setup step 2)
 scripts/gen_mockup_seed.py     regenerates seed_mockup_100.sql from an editable Python list

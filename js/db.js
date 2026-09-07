@@ -8,6 +8,34 @@ const supabaseClient = window.supabase.createClient(
   window.APP_CONFIG.SUPABASE_ANON_KEY
 );
 
+// ---- Admin auth -----------------------------------------------------------
+// The admin side (admin.html) is gated by a single shared login rather than
+// per-person accounts. Under the hood it's still real Supabase Auth (so Row
+// Level Security can actually tell "logged-in staff" from "the public") —
+// the email is a fixed, non-mailbox identifier fixed for this app; only the
+// password is the real, per-deployment secret staff type in. See README.md
+// for how to create this user once in the Supabase dashboard.
+const ADMIN_EMAIL = 'admin@warehouse.local';
+
+const Auth = {
+  async signIn(password) {
+    const { data, error } = await supabaseClient.auth.signInWithPassword({ email: ADMIN_EMAIL, password });
+    if (error) throw error;
+    return data;
+  },
+  async signOut() {
+    await supabaseClient.auth.signOut();
+  },
+  async getSession() {
+    const { data, error } = await supabaseClient.auth.getSession();
+    if (error) throw error;
+    return data.session;
+  },
+  onChange(cb) {
+    supabaseClient.auth.onAuthStateChange((_event, session) => cb(session));
+  },
+};
+
 function requestCode() {
   const d = new Date();
   const y = String(d.getFullYear()).slice(-2);
@@ -141,6 +169,18 @@ const DB = {
 
   async setRequestStatus(id, status) {
     const { data, error } = await supabaseClient.from('requests').update({ status }).eq('id', id).select().single();
+    if (error) throw error;
+    return data;
+  },
+
+  // The public requester form (no login, no item picker) — request_code is
+  // assigned by the system the same way lot/SKU codes are (see schema.sql).
+  async createPublicRequest({ requesterName, department, comment }) {
+    const { data, error } = await supabaseClient.rpc('create_public_request', {
+      p_requester_name: requesterName,
+      p_department: department || null,
+      p_comment: comment,
+    });
     if (error) throw error;
     return data;
   },

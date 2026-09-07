@@ -326,9 +326,68 @@ td.num, th.num { text-align: right; font-family: var(--mono); }
 
 /* ---- Print ------------------------------------------------------------------------------ */
 @media print {
-  .header, .tabbar, .btn, .toast { display: none !important; }
+  .header, .tabbar, .btn, .toast, .no-print, .login-screen { display: none !important; }
   body { background: #fff; }
   main { padding: 0; }
+  #print-area {
+    box-shadow: none !important; border: 1px solid #ccc; color: #111; background: #fff;
+  }
+  .confirm-code { background: #fff !important; color: #111 !important; border: 1px solid #ccc; }
+}
+
+/* ---- Landing page (index.html) -------------------------------------------------------- */
+.landing {
+  min-height: 100vh; min-height: 100dvh;
+  display: flex; align-items: center; justify-content: center;
+  padding: var(--pad); position: relative;
+}
+.landing-lang { position: absolute; top: var(--s4); right: var(--s4); }
+.landing-inner { width: 100%; max-width: 440px; text-align: center; }
+.landing-title { font-size: var(--t-h1); font-weight: 700; margin-bottom: var(--s1); }
+.landing-subtitle { color: var(--ink-3); font-size: var(--t-meta); margin-bottom: var(--s7); }
+.landing-cards { display: flex; flex-direction: column; gap: var(--s4); }
+.landing-card {
+  display: block; text-align: left; text-decoration: none; color: inherit;
+  background: var(--card); border-radius: var(--r-media); box-shadow: var(--lift-1);
+  padding: var(--s5); transition: box-shadow .2s var(--ease), transform .2s var(--ease);
+}
+.landing-card:hover { box-shadow: var(--lift-2); transform: translateY(-1px); }
+.landing-card-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 48px; height: 48px; border-radius: var(--r-control);
+  background: var(--signal-wash); color: var(--signal); margin-bottom: var(--s3);
+}
+.landing-card-title { font-size: var(--t-sec); font-weight: 600; margin-bottom: var(--s1); }
+.landing-card-desc { color: var(--ink-3); font-size: var(--t-meta); }
+
+/* ---- Admin login screen (admin.html) -------------------------------------------------- */
+.login-screen {
+  min-height: 100vh; min-height: 100dvh;
+  display: flex; align-items: center; justify-content: center;
+  padding: var(--pad);
+}
+.login-card {
+  width: 100%; max-width: 360px;
+  background: var(--card); border-radius: var(--r-media); box-shadow: var(--lift-2);
+  padding: var(--s6) var(--s5);
+}
+.login-card .field { margin-top: var(--s4); }
+
+/* ---- Public request confirmation / printable receipt (request.html) ------------------- */
+.confirm-card { text-align: center; padding: var(--s6) var(--s5); }
+.confirm-check { color: var(--ok); margin: 0 auto var(--s3); display: flex; justify-content: center; }
+.confirm-title { font-size: var(--t-sec); font-weight: 700; margin-bottom: var(--s2); }
+.confirm-code {
+  font-family: var(--mono); font-size: var(--t-h1); font-weight: 700; letter-spacing: .02em;
+  background: var(--signal-wash); color: var(--signal); border-radius: var(--r-control);
+  padding: var(--s4); margin: var(--s4) 0;
+}
+.confirm-rows { text-align: left; border-top: 1px solid var(--line); padding-top: var(--s4); margin-top: var(--s2); }
+.confirm-row { display: flex; justify-content: space-between; gap: var(--s3); padding: var(--s2) 0; font-size: var(--t-meta); }
+.confirm-row span { color: var(--ink-3); }
+.confirm-comment {
+  text-align: left; margin-top: var(--s3); padding-top: var(--s3); border-top: 1px solid var(--line);
+  font-size: var(--t-meta); white-space: pre-wrap;
 }
 
 /* ---- Tablet and up ------------------------------------------------------------------------
@@ -341,6 +400,8 @@ td.num, th.num { text-align: right; font-family: var(--mono); }
   .card-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--s3); }
   .card-list .card + .card { margin-top: 0; }
   .field-row.field-row-3 { grid-template-columns: repeat(3, 1fr); }
+  .landing-cards { flex-direction: row; }
+  .landing-card { flex: 1; }
 }
 @media (min-width: 1024px) {
   :root { --shell: 1080px; }
