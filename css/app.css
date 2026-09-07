@@ -152,13 +152,26 @@ main {
 /* ---- Search --------------------------------------------------------------------- */
 .search-wrap { position: relative; margin-bottom: var(--s3); }
 .search-wrap > svg.icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--ink-3); pointer-events: none; }
-.search-input {
+/* Scoped as ".search-wrap .search-input" (not just ".search-input") on
+   purpose: the request-form item search sits inside a ".field" wrapper (it
+   needs a <label>), and ".field input" — one class + one type selector —
+   otherwise outranks a bare ".search-input" on specificity and silently
+   collapses this padding back to the generic field padding, which pulls
+   the placeholder text left until it overlaps the search icon. Two classes
+   beats class+type regardless of source order, so this wins everywhere the
+   markup ever nests a search bar. Also opts out of the native
+   type="search" chrome (appearance: none) so a focused/filled field can't
+   reintroduce its own reserved inset either. */
+.search-wrap .search-input {
+  appearance: none; -webkit-appearance: none;
   display: block; width: 100%; border: 1px solid transparent; border-radius: var(--r-commit);
   padding: 10px var(--s3) 10px 36px; font-size: var(--t-meta); font-family: inherit;
   background: var(--paper-2); color: var(--ink); margin-bottom: 0;
 }
-.search-input::placeholder { color: var(--ink-3); }
-.search-input:focus {
+.search-wrap .search-input::-webkit-search-cancel-button,
+.search-wrap .search-input::-webkit-search-decoration { -webkit-appearance: none; appearance: none; }
+.search-wrap .search-input::placeholder { color: var(--ink-3); }
+.search-wrap .search-input:focus {
   outline: none; background: var(--paper); border-color: var(--line-strong); box-shadow: 0 0 0 3px var(--signal-wash);
 }
 
