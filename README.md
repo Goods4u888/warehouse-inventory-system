@@ -86,18 +86,23 @@ in the database enforces this split for real, not just in the UI — see
   tile per door, each badged with whether it needs a login before you click
   it.
 - **Public request form** (`request.html`) — no login. Name and department,
-  then either search the same item catalog Stock/Receive use and say how
-  many, add a free-text comment, or both — the form only insists on at least
-  one of item-or-comment. Submitting hands back a request number
-  (`REQ-YYMMDD-NNN`, assigned atomically by the database, same pattern as lot
-  and SKU codes) to write down or reference later. The confirmation screen
-  has a **Print / Save as PDF** button (the browser's own print dialog, saved
-  as a PDF from there) so a requester can keep a copy without needing to be
-  logged in to anything. These land in the same `requests` table and the
-  same admin Requests tab as the item-based requests staff create
-  internally — one pipeline. The item search only ever shows active items
-  (never deactivated ones), via a narrow read-only RLS policy — see "Public
-  form vs. admin login" below.
+  then search the same item catalog Stock/Receive use and add any number of
+  items to a list (each gets its own quantity), a free-text comment, or
+  both — the form only insists on at least one of items-or-comment.
+  Submitting hands back one request number (`REQ-YYMMDD-NNN`, assigned
+  atomically by the database, same pattern as lot and SKU codes) shared by
+  every item in the list. The confirmation screen has a **Print / Save as
+  PDF** button (the browser's own print dialog, saved as a PDF from there)
+  so a requester can keep a copy without needing to be logged in to
+  anything. These land in the same `requests` table and the same admin
+  Requests tab as the item-based requests staff create internally — one
+  pipeline. Under the hood a multi-item submission is stored as one row per
+  item (all sharing the same `request_code`), so the admin Requests
+  list/Reports show one card per item rather than grouping a multi-item
+  request under a single card — a deliberate tradeoff to avoid touching the
+  Scan/Issue matching logic, which already works sku-by-sku. The item search
+  only ever shows active items (never deactivated ones), via a narrow
+  read-only RLS policy — see "Public form vs. admin login" below.
 - **Admin login** (`admin.html`) — a single shared password gates the whole
   admin app (Stock, Receive, Scan, Requests, Reports). It's real Supabase
   Auth underneath (see Setup step 3), so this isn't just a UI curtain: Row

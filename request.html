@@ -44,25 +44,13 @@
         </div>
 
         <div class="field">
-          <label data-i18n="fieldSelectItem">Item (optional)</label>
+          <label data-i18n="fieldSelectItems">Items (optional)</label>
           <div class="search-wrap" data-icon="search">
             <input type="search" class="search-input" id="req-item-search" data-i18n-placeholder="searchItemsPlaceholder" placeholder="Search items by name or code" autocomplete="off">
           </div>
           <div id="req-item-results" class="req-item-results"></div>
 
-          <div id="req-item-selected" class="req-item-selected" hidden>
-            <div class="req-item-selected-row">
-              <div>
-                <strong id="req-item-selected-name"></strong>
-                <div class="card-meta mono" id="req-item-selected-code"></div>
-              </div>
-              <button type="button" class="btn btn-ghost btn-sm" id="req-item-clear" data-icon="xCircle"><span data-i18n="btnChangeItem">Change</span></button>
-            </div>
-            <div class="field" style="margin-top:var(--s3)">
-              <label for="req-item-qty" data-i18n="fieldQtyNeeded">Quantity</label>
-              <input type="number" id="req-item-qty" min="0.0001" step="any">
-            </div>
-          </div>
+          <div id="req-item-list" class="req-item-list"></div>
         </div>
 
         <div class="field">
@@ -86,8 +74,11 @@
         <div class="confirm-rows">
           <div class="confirm-row"><span data-i18n="fieldRequesterName2">Your name</span><strong id="confirm-name"></strong></div>
           <div class="confirm-row"><span data-i18n="fieldDepartment">Department</span><strong id="confirm-department"></strong></div>
-          <div class="confirm-row" id="confirm-item-row" hidden><span data-i18n="fieldItem">Item</span><strong id="confirm-item"></strong></div>
           <div class="confirm-row"><span data-i18n="requestSubmittedAt">Submitted</span><strong id="confirm-when"></strong></div>
+        </div>
+        <div id="confirm-items-block" hidden>
+          <p class="eyebrow" style="margin-top:var(--s4)" data-i18n="confirmItemsHeading">Items</p>
+          <div id="confirm-items" class="req-item-list"></div>
         </div>
         <div class="confirm-comment" id="confirm-comment" hidden></div>
       </div>

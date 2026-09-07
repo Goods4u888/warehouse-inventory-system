@@ -434,11 +434,38 @@ body.hub-page main { padding-bottom: var(--s6); }
 .req-item-option svg.icon { flex: none; color: var(--ink-3); }
 .req-item-option-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .req-item-empty { color: var(--ink-3); font-size: var(--t-micro); padding: var(--s2) 0; }
-.req-item-selected {
-  margin-top: var(--s3); border: 1px solid var(--line); border-radius: var(--r-control);
+
+/* The list of items a requester has added — one row per item, each with its
+   own quantity, so a request can ask for any number of items in one go. */
+.req-item-list { display: flex; flex-direction: column; gap: var(--s2); margin-top: var(--s3); }
+.req-item-row {
+  display: flex; align-items: center; gap: var(--s3);
+  border: 1px solid var(--line); border-radius: var(--r-control);
   padding: var(--s3); background: var(--paper-2);
 }
-.req-item-selected-row { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--s3); }
+.req-item-row-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+/* Scoped as ".req-item-row .req-item-row-qty" (not just ".req-item-row-qty")
+   for the same reason the search input above is double-scoped: this list
+   sits inside a ".field" wrapper (the "Items" label needs one), and
+   ".field input" — one class + one type selector, specificity (0,1,1) —
+   otherwise outranks a bare ".req-item-row-qty" (0,1,0) and collapses it
+   back to width:100%, which crushes the item name/code text next to it
+   down to almost nothing. Two classes (0,2,0) beats class+type regardless
+   of source order. */
+.req-item-row .req-item-row-qty {
+  width: 100px; flex: none; border: 1px solid transparent; border-radius: var(--r-control);
+  padding: 8px var(--s2); font-size: var(--t-meta); font-family: inherit;
+  background: var(--paper); color: var(--ink); text-align: right;
+}
+.req-item-row .req-item-row-qty:focus { outline: none; border-color: var(--line-strong); box-shadow: 0 0 0 3px var(--signal-wash); }
+.req-item-row-remove {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 32px; height: 32px; border: none; border-radius: 50%;
+  background: transparent; color: var(--ink-3); cursor: pointer; touch-action: manipulation;
+}
+.req-item-row-remove:hover { background: var(--line); color: var(--ink); }
+.req-item-row-readonly { background: var(--paper); }
+.req-item-row-qty-display { flex: none; font-size: var(--t-meta); font-weight: 600; color: var(--ink); }
 
 /* ---- Tablet and up ------------------------------------------------------------------------
    Same single codebase, more room: card lists (stock, requests, manage-items) move to a

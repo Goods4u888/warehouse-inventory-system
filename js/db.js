@@ -187,16 +187,17 @@ const DB = {
     return data;
   },
 
-  // The public requester form (no login) — either an item + quantity picked
-  // from the catalog, a free-text comment, or both; request_code is assigned
-  // by the system the same way lot/SKU codes are (see schema.sql).
-  async createPublicRequest({ requesterName, department, comment, skuId, qty }) {
+  // The public requester form (no login) — a list of items (each { skuId,
+  // qty }), a free-text comment, or both; request_code is assigned by the
+  // system the same way lot/SKU codes are (see schema.sql). Returns an
+  // array: one row per item, all sharing one request_code (or a single
+  // row for a comment-only submission).
+  async createPublicRequest({ requesterName, department, comment, items }) {
     const { data, error } = await supabaseClient.rpc('create_public_request', {
       p_requester_name: requesterName,
       p_department: department || null,
       p_comment: comment || null,
-      p_sku_id: skuId || null,
-      p_qty_requested: qty || null,
+      p_items: items && items.length ? items.map((i) => ({ sku_id: i.skuId, qty: i.qty })) : null,
     });
     if (error) throw error;
     return data;

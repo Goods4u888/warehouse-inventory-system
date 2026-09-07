@@ -1,10 +1,11 @@
 // ============================================================================
 // Public requester form (request.html) — no login. A requester can search
-// the catalog and pick a specific item + quantity, write a free-text
-// comment, or both (the database requires at least one — see the
-// create_public_request check in schema.sql). Submits straight to
-// DB.createPublicRequest(). This file is intentionally standalone (doesn't
-// load app.js) since almost none of the admin app's wiring applies here.
+// the catalog and add any number of items (each with its own quantity), a
+// free-text comment, or both (the database requires at least one — see the
+// create_public_request check in schema.sql). Submitting hands back one
+// request_code shared by every item in the list. This file is intentionally
+// standalone (doesn't load app.js) since almost none of the admin app's
+// wiring applies here.
 // ============================================================================
 
 function escapeHtml(s) {
@@ -25,6 +26,7 @@ document.getElementById('lang-toggle').addEventListener('click', () => {
 });
 function onLanguageChange() {
   renderItemResults(); // re-render category labels/hints in the new language
+  renderItemList();
 }
 
 function showFormView() {
@@ -32,36 +34,45 @@ function showFormView() {
   document.getElementById('view-confirm').hidden = true;
 }
 
-function showConfirmView(request, selectedItem) {
+function showConfirmView({ requestCode, createdAt, requesterName, department, items: submittedItems, comment }) {
   document.getElementById('view-form').hidden = true;
   document.getElementById('view-confirm').hidden = false;
-  document.getElementById('confirm-code').textContent = request.request_code;
-  document.getElementById('confirm-name').textContent = request.requester_name;
-  document.getElementById('confirm-department').textContent = request.department || t('noDepartment');
-  document.getElementById('confirm-when').textContent = fmtDateTime(request.created_at);
+  document.getElementById('confirm-code').textContent = requestCode;
+  document.getElementById('confirm-name').textContent = requesterName;
+  document.getElementById('confirm-department').textContent = department || t('noDepartment');
+  document.getElementById('confirm-when').textContent = fmtDateTime(createdAt);
 
-  const itemRow = document.getElementById('confirm-item-row');
-  if (selectedItem) {
-    itemRow.hidden = false;
-    document.getElementById('confirm-item').textContent =
-      `${selectedItem.name} — ${fmtQty(request.qty_requested)} ${selectedItem.base_uom || ''}`.trim();
+  const itemsBlock = document.getElementById('confirm-items-block');
+  const itemsBox = document.getElementById('confirm-items');
+  if (submittedItems.length) {
+    itemsBlock.hidden = false;
+    itemsBox.innerHTML = submittedItems.map((it) => `
+      <div class="req-item-row req-item-row-readonly">
+        <span class="req-item-row-text">
+          <strong>${escapeHtml(it.name)}</strong>
+          <span class="card-meta mono">${escapeHtml(it.sku_code)}</span>
+        </span>
+        <span class="req-item-row-qty-display">${escapeHtml(fmtQty(it.qty))} ${escapeHtml(it.base_uom || '')}</span>
+      </div>
+    `).join('');
   } else {
-    itemRow.hidden = true;
+    itemsBlock.hidden = true;
+    itemsBox.innerHTML = '';
   }
 
   const commentEl = document.getElementById('confirm-comment');
-  if (request.notes) {
+  if (comment) {
     commentEl.hidden = false;
-    commentEl.textContent = request.notes;
+    commentEl.textContent = comment;
   } else {
     commentEl.hidden = true;
     commentEl.textContent = '';
   }
 }
 
-// ---- Item search / picker --------------------------------------------------
+// ---- Item search / picker (a list, not a single pick) ----------------------
 let allItems = [];
-let selectedItem = null;
+let items = []; // { id, name, sku_code, base_uom, qty }
 
 async function loadItems() {
   try {
@@ -74,13 +85,14 @@ async function loadItems() {
 function renderItemResults() {
   const box = document.getElementById('req-item-results');
   const q = document.getElementById('req-item-search').value.trim().toLowerCase();
-  if (selectedItem || !q) {
+  if (!q) {
     box.innerHTML = '';
     box.hidden = true;
     return;
   }
+  const addedIds = new Set(items.map((it) => it.id));
   const matches = allItems
-    .filter((s) => s.name.toLowerCase().includes(q) || s.sku_code.toLowerCase().includes(q))
+    .filter((s) => !addedIds.has(s.id) && (s.name.toLowerCase().includes(q) || s.sku_code.toLowerCase().includes(q)))
     .slice(0, 8);
   box.hidden = false;
   box.innerHTML = matches.length
@@ -96,44 +108,62 @@ function renderItemResults() {
     : `<div class="req-item-empty">${escapeHtml(t('emptySearchResultsShort'))}</div>`;
 
   box.querySelectorAll('.req-item-option').forEach((btn) => {
-    btn.addEventListener('click', () => selectItem(btn.getAttribute('data-id')));
+    btn.addEventListener('click', () => addItem(btn.getAttribute('data-id')));
   });
 }
 
-function selectItem(id) {
+function renderItemList() {
+  const box = document.getElementById('req-item-list');
+  box.innerHTML = items.map((it) => `
+    <div class="req-item-row" data-id="${escapeHtml(it.id)}">
+      <span class="req-item-row-text">
+        <strong>${escapeHtml(it.name)}</strong>
+        <span class="card-meta mono">${escapeHtml(it.sku_code)} · ${escapeHtml(it.base_uom)}</span>
+      </span>
+      <input type="number" class="req-item-row-qty" data-id="${escapeHtml(it.id)}" min="0.0001" step="any"
+        value="${it.qty === '' ? '' : escapeHtml(String(it.qty))}" placeholder="${escapeHtml(t('fieldQtyNeeded'))}">
+      <button type="button" class="req-item-row-remove" data-id="${escapeHtml(it.id)}" data-icon="xCircle" aria-label="${escapeHtml(t('btnRemoveItem'))}"></button>
+    </div>
+  `).join('');
+  applyStaticIcons();
+
+  box.querySelectorAll('.req-item-row-qty').forEach((input) => {
+    input.addEventListener('input', () => {
+      const it = items.find((x) => x.id === input.getAttribute('data-id'));
+      if (it) it.qty = input.value;
+    });
+  });
+  box.querySelectorAll('.req-item-row-remove').forEach((btn) => {
+    btn.addEventListener('click', () => removeItem(btn.getAttribute('data-id')));
+  });
+
+  updateCommentRequirement();
+}
+
+function addItem(id) {
+  if (items.some((it) => it.id === id)) return;
   const item = allItems.find((s) => s.id === id);
   if (!item) return;
-  selectedItem = item;
+  items.push({ id: item.id, name: item.name, sku_code: item.sku_code, base_uom: item.base_uom, qty: '' });
   document.getElementById('req-item-search').value = '';
   document.getElementById('req-item-results').innerHTML = '';
   document.getElementById('req-item-results').hidden = true;
-  document.getElementById('req-item-selected-name').textContent = item.name;
-  document.getElementById('req-item-selected-code').textContent = `${item.sku_code} · ${item.base_uom}`;
-  document.getElementById('req-item-selected').hidden = false;
-  document.getElementById('req-item-qty').focus();
-  updateCommentRequirement();
+  renderItemList();
+  const qtyInput = document.querySelector(`.req-item-row-qty[data-id="${CSS.escape(id)}"]`);
+  if (qtyInput) qtyInput.focus();
 }
 
-function clearItem() {
-  selectedItem = null;
-  document.getElementById('req-item-selected').hidden = true;
-  document.getElementById('req-item-qty').value = '';
-  updateCommentRequirement();
+function removeItem(id) {
+  items = items.filter((it) => it.id !== id);
+  renderItemList();
 }
 
 function updateCommentRequirement() {
-  const commentEl = document.getElementById('req-comment');
   const hint = document.getElementById('req-comment-hint');
-  if (selectedItem) {
-    commentEl.removeAttribute('required');
-    hint.hidden = true;
-  } else {
-    hint.hidden = false;
-  }
+  hint.hidden = items.length > 0;
 }
 
 document.getElementById('req-item-search').addEventListener('input', renderItemResults);
-document.getElementById('req-item-clear').addEventListener('click', clearItem);
 
 document.getElementById('form-public-request').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -141,29 +171,40 @@ document.getElementById('form-public-request').addEventListener('submit', async 
   errEl.innerHTML = '';
 
   const comment = document.getElementById('req-comment').value.trim();
-  const qtyRaw = document.getElementById('req-item-qty').value;
 
-  if (selectedItem && (!qtyRaw || Number(qtyRaw) <= 0)) {
+  const missingQty = items.find((it) => !it.qty || Number(it.qty) <= 0);
+  if (missingQty) {
     errEl.innerHTML = `<div class="form-error">${escapeHtml(t('errorQtyRequired'))}</div>`;
-    document.getElementById('req-item-qty').focus();
+    const qtyInput = document.querySelector(`.req-item-row-qty[data-id="${CSS.escape(missingQty.id)}"]`);
+    if (qtyInput) qtyInput.focus();
     return;
   }
-  if (!selectedItem && !comment) {
+  if (!items.length && !comment) {
     errEl.innerHTML = `<div class="form-error">${escapeHtml(t('errorItemOrComment'))}</div>`;
     return;
   }
 
+  const requesterName = document.getElementById('req-name').value.trim();
+  const department = document.getElementById('req-department').value.trim();
+
   const btn = document.getElementById('req-submit');
   btn.disabled = true;
   try {
-    const request = await DB.createPublicRequest({
-      requesterName: document.getElementById('req-name').value.trim(),
-      department: document.getElementById('req-department').value.trim(),
+    const rows = await DB.createPublicRequest({
+      requesterName,
+      department,
       comment: comment || null,
-      skuId: selectedItem ? selectedItem.id : null,
-      qty: selectedItem ? Number(qtyRaw) : null,
+      items: items.map((it) => ({ skuId: it.id, qty: Number(it.qty) })),
     });
-    showConfirmView(request, selectedItem);
+    const first = Array.isArray(rows) ? rows[0] : rows; // fake-client / real client both hand back the RPC's rows
+    showConfirmView({
+      requestCode: first.request_code,
+      createdAt: first.created_at,
+      requesterName,
+      department,
+      items,
+      comment,
+    });
   } catch (err) {
     errEl.innerHTML = `<div class="form-error">${escapeHtml(err.message || t('errorRequestFailed'))}</div>`;
   } finally {
@@ -176,8 +217,8 @@ document.getElementById('btn-print').addEventListener('click', () => window.prin
 document.getElementById('btn-submit-another').addEventListener('click', () => {
   document.getElementById('form-public-request').reset();
   document.getElementById('request-error').innerHTML = '';
-  clearItem();
-  updateCommentRequirement();
+  items = [];
+  renderItemList();
   showFormView();
 });
 
