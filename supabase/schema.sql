@@ -73,7 +73,13 @@ begin
 end $$;
 
 -- ----------------------------------------------------------------------------
--- 2. Lots — one row per receiving event; the QR sticker encodes lot_code
+-- 2. Lots — LEGACY as of 2026-09-08. Originally one row per receiving
+--    event, with its own QR sticker per batch. The system now uses one
+--    permanent QR sticker per ITEM instead (see skus.qty_on_hand and the
+--    rewritten receive_stock/return_stock/issue_stock below) — no more
+--    per-batch tracking. This table, lot_sequences, and the stock_by_lot
+--    view are kept only so pre-migration data isn't destroyed; nothing
+--    written after the migration reads or writes them. Safe to ignore.
 -- ----------------------------------------------------------------------------
 create table if not exists lots (
   id             uuid primary key default gen_random_uuid(),
@@ -107,8 +113,32 @@ alter table lots drop constraint if exists lots_source_chk;
 alter table lots add constraint lots_source_chk check (source in ('purchase','return'));
 alter table lots add column if not exists note text;
 
+-- qty_on_hand (added 2026-09-08): the single running total per item that
+-- replaces summing lots.balance — see the "2. Lots" note above. Guarded so
+-- the backfill-from-lots runs exactly once, the moment this column is
+-- introduced: on every later re-run of this file, `add column if not
+-- exists` alone would be a no-op, so the backfill must be skipped too, or a
+-- re-run would blow away every receive/issue/return that happened after
+-- go-live and reset each item back to its frozen pre-migration lot total.
+do $$
+declare
+  v_col_existed boolean;
+begin
+  select exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'skus' and column_name = 'qty_on_hand'
+  ) into v_col_existed;
+
+  if not v_col_existed then
+    alter table skus add column qty_on_hand numeric not null default 0;
+    update skus s set qty_on_hand = coalesce(
+      (select sum(l.balance) from lots l where l.sku_id = s.id), 0
+    );
+  end if;
+end $$;
+
 -- ----------------------------------------------------------------------------
--- 3. Requests — a requester's ask, fulfilled by scanning a lot
+-- 3. Requests — a requester's ask, fulfilled by scanning an item
 -- ----------------------------------------------------------------------------
 create table if not exists requests (
   id              uuid primary key default gen_random_uuid(),
@@ -167,16 +197,22 @@ begin
 end $$;
 
 -- ----------------------------------------------------------------------------
--- 4. Transactions — every receive / issue event (the movement ledger)
+-- 4. Transactions — every receive / issue / return event (the movement
+--    ledger). lot_id is LEGACY (see the "2. Lots" note above) — a fresh
+--    install never sets it; it's kept nullable only so pre-migration rows
+--    that do have one aren't touched. sku_id is what every row (old and
+--    new) is keyed by now.
 -- ----------------------------------------------------------------------------
 create table if not exists transactions (
   id            uuid primary key default gen_random_uuid(),
-  type          text not null check (type in ('receive','issue')),
-  lot_id        uuid not null references lots(id) on delete restrict,
+  type          text not null check (type in ('receive','issue','return')),
+  sku_id        uuid references skus(id) on delete restrict,
+  lot_id        uuid references lots(id) on delete restrict,
   request_id    uuid references requests(id) on delete set null,
   qty           numeric not null,
   uom           text not null,
   performed_by  text,
+  note          text,
   created_at    timestamptz not null default now()
 );
 
@@ -189,6 +225,22 @@ create index if not exists transactions_created_at_idx on transactions(created_a
 -- cheap either way, and always ends in the same state.
 alter table transactions drop constraint if exists transactions_type_check;
 alter table transactions add constraint transactions_type_check check (type in ('receive','issue','return'));
+
+-- Migration for a database created before the item-level QR change
+-- (2026-09-08): lot_id used to be required and sku_id/note didn't exist.
+-- Add the new columns, relax lot_id, and backfill sku_id from each row's
+-- (legacy) lot — safe to re-run, since the backfill only ever fills in
+-- rows that are still null. Must run before the sku_id index below: on a
+-- pre-existing table `create table if not exists` above is a no-op, so
+-- sku_id doesn't exist until this alter adds it.
+alter table transactions add column if not exists sku_id uuid references skus(id) on delete restrict;
+alter table transactions add column if not exists note text;
+alter table transactions alter column lot_id drop not null;
+update transactions t set sku_id = l.sku_id
+from lots l
+where t.lot_id = l.id and t.sku_id is null;
+
+create index if not exists transactions_sku_id_idx on transactions(sku_id);
 
 -- ----------------------------------------------------------------------------
 -- 5. Discrepancies — issued qty != requested qty (variance record)
@@ -241,7 +293,8 @@ create table if not exists request_sequences (
 );
 
 -- ----------------------------------------------------------------------------
--- 6. Views — current stock, aggregated from lots
+-- 6. Views — current stock, read straight off skus.qty_on_hand as of
+--    2026-09-08 (previously summed from lots — see the "2. Lots" note).
 -- ----------------------------------------------------------------------------
 create or replace view stock_by_sku as
 select
@@ -251,25 +304,18 @@ select
   s.category,
   s.base_uom,
   s.min_threshold,
-  coalesce(sum(l.balance), 0)                    as on_hand,
-  coalesce(sum(l.balance), 0) < s.min_threshold  as is_low
+  s.qty_on_hand                as on_hand,
+  s.qty_on_hand < s.min_threshold as is_low
 from skus s
-left join lots l on l.sku_id = s.id
-where s.is_active
-group by s.id;
+where s.is_active;
 
 create or replace view low_stock as
 select * from stock_by_sku where is_low order by on_hand asc;
 
--- Dropped and recreated (not create-or-replace): this view gained `source`
--- and `note` partway through its column list when the Return feature was
--- added, and Postgres only allows CREATE OR REPLACE VIEW to append new
--- columns at the very end, never insert or reorder them — a plain
--- create-or-replace here fails with 42P16 ("cannot change name of view
--- column ... to ...") on any database where the view already exists from
--- an earlier schema version. Nothing else in this schema selects from it
--- by column position (app code and every other view/function reference it
--- by name), so dropping it first is safe.
+-- LEGACY — kept only so pre-migration batch history is still queryable by
+-- hand if ever needed; nothing in the app reads this view anymore (scanning
+-- now looks an item up by sku_code directly, not lot_code). Left exactly as
+-- it was, unchanged.
 drop view if exists stock_by_lot;
 create view stock_by_lot as
 select
@@ -280,139 +326,134 @@ from lots l
 join skus s on s.id = l.sku_id
 order by l.receive_date desc;
 
-create or replace view movement_history as
+-- Dropped and recreated (not create-or-replace): lot_code is gone from the
+-- column list (transactions now join straight to skus via sku_id, not via
+-- lots), and Postgres only allows CREATE OR REPLACE VIEW to append columns
+-- at the end, never remove or reorder them — same reasoning as stock_by_lot
+-- above, which is what originally established this pattern in this file.
+drop view if exists movement_history;
+create view movement_history as
 select
-  t.id as transaction_id, t.type, t.qty, t.uom, t.performed_by, t.created_at,
-  l.lot_code, s.sku_code, s.name as sku_name,
+  t.id as transaction_id, t.type, t.qty, t.uom, t.performed_by, t.note, t.created_at,
+  s.sku_code, s.name as sku_name,
   r.request_code
 from transactions t
-join lots l on l.id = t.lot_id
-join skus s on s.id = l.sku_id
+join skus s on s.id = t.sku_id
 left join requests r on r.id = t.request_id
 order by t.created_at desc;
 
-create or replace view discrepancy_report as
+drop view if exists discrepancy_report;
+create view discrepancy_report as
 select
   d.id, d.requested_qty, d.actual_qty, d.variance, d.notes, d.created_at,
   r.request_code, r.requester_name,
-  s.sku_code, s.name as sku_name,
-  l.lot_code
+  s.sku_code, s.name as sku_name
 from discrepancies d
 join requests r on r.id = d.request_id
 join transactions t on t.id = d.transaction_id
-join lots l on l.id = t.lot_id
-join skus s on s.id = l.sku_id
+join skus s on s.id = t.sku_id
 order by d.created_at desc;
 
 -- ----------------------------------------------------------------------------
 -- 7. RPCs — the two writes that must be atomic
 -- ----------------------------------------------------------------------------
 
--- Receiving: create a lot + its opening transaction, return the new lot
--- (the caller renders lot_code as a QR code for the sticker). The lot code
--- is SKU-YYMMDD-NNN, NNN being a running count of receipts of this SKU on
--- this date (see lot_sequences above).
+-- Receiving (rewritten 2026-09-08 for the one-QR-per-item model): adds
+-- straight onto the item's running total and logs a transaction — no more
+-- creating a new lot/QR per receiving event (see the "2. Lots" note above).
+-- Returns the updated sku row; the caller already has (or can print) that
+-- item's one permanent QR sticker, which encodes sku_code.
+-- v1 (through 2026-09-07): (p_sku_id, p_qty, p_uom, p_received_by,
+--   p_supplier_ref) returned a new `lots` row.
+-- v2 (current): same parameters, but returns `skus` instead of `lots` —
+-- dropped and recreated rather than create-or-replace, since Postgres
+-- doesn't allow a function's return type to change in place.
+drop function if exists receive_stock(uuid, numeric, text, text, text);
+
 create or replace function receive_stock(
   p_sku_id uuid, p_qty numeric, p_uom text,
   p_received_by text default null, p_supplier_ref text default null
-) returns lots
+) returns skus
 language plpgsql
 as $$
 declare
-  v_lot lots;
-  v_lot_code text;
-  v_sku_code text;
-  v_seq int;
+  v_sku skus;
 begin
   if p_qty <= 0 then
     raise exception 'Quantity must be greater than zero';
   end if;
 
-  select sku_code into v_sku_code from skus where id = p_sku_id;
+  update skus set qty_on_hand = qty_on_hand + p_qty
+  where id = p_sku_id
+  returning * into v_sku;
+
   if not found then
     raise exception 'SKU not found';
   end if;
 
-  insert into lot_sequences (sku_id, seq_date, last_seq)
-  values (p_sku_id, current_date, 1)
-  on conflict (sku_id, seq_date)
-  do update set last_seq = lot_sequences.last_seq + 1
-  returning last_seq into v_seq;
+  insert into transactions (type, sku_id, qty, uom, performed_by, note)
+  values ('receive', p_sku_id, p_qty, p_uom, p_received_by, p_supplier_ref);
 
-  v_lot_code := v_sku_code || '-' || to_char(current_date, 'YYMMDD') || '-' || lpad(v_seq::text, 3, '0');
-
-  insert into lots (lot_code, sku_id, qty_received, balance, uom, received_by, supplier_ref)
-  values (v_lot_code, p_sku_id, p_qty, p_qty, p_uom, p_received_by, p_supplier_ref)
-  returning * into v_lot;
-
-  insert into transactions (type, lot_id, qty, uom, performed_by)
-  values ('receive', v_lot.id, p_qty, p_uom, p_received_by);
-
-  return v_lot;
+  return v_sku;
 end;
 $$;
 
--- Returning: materials that were issued/taken out come back into stock.
--- Deliberately freeform, like the receive flow, and not tied to a specific
--- original request — a site return in practice often isn't cleanly one
--- pickup's worth, and staff shouldn't have to hunt down the original
--- request just to log it. Same lot-creation shape as receive_stock (own
--- lot_code/QR sticker, same lot_sequences counter), just tagged
--- source='return' and logged as a 'return' transaction instead of
--- 'receive'. Admin-only — see grants below, not reachable from the public
--- form.
+-- Returning (rewritten 2026-09-08, same reasoning as receive_stock above):
+-- materials that were issued/taken out come back into stock. Deliberately
+-- freeform, like receiving, and not tied to a specific original request —
+-- a site return in practice often isn't cleanly one pickup's worth, and
+-- staff shouldn't have to hunt down the original request just to log it.
+-- Adds straight onto the item's running total, tagged as a 'return'
+-- transaction (type alone tells it apart from an ordinary 'receive' now —
+-- lots.source is legacy, see above). Admin-only — see grants below, not
+-- reachable from the public form.
+drop function if exists return_stock(uuid, numeric, text, text, text);
+
 create or replace function return_stock(
   p_sku_id uuid, p_qty numeric, p_uom text,
   p_returned_by text default null, p_note text default null
-) returns lots
+) returns skus
 language plpgsql
 as $$
 declare
-  v_lot lots;
-  v_lot_code text;
-  v_sku_code text;
-  v_seq int;
+  v_sku skus;
 begin
   if p_qty <= 0 then
     raise exception 'Quantity must be greater than zero';
   end if;
 
-  select sku_code into v_sku_code from skus where id = p_sku_id;
+  update skus set qty_on_hand = qty_on_hand + p_qty
+  where id = p_sku_id
+  returning * into v_sku;
+
   if not found then
     raise exception 'SKU not found';
   end if;
 
-  insert into lot_sequences (sku_id, seq_date, last_seq)
-  values (p_sku_id, current_date, 1)
-  on conflict (sku_id, seq_date)
-  do update set last_seq = lot_sequences.last_seq + 1
-  returning last_seq into v_seq;
+  insert into transactions (type, sku_id, qty, uom, performed_by, note)
+  values ('return', p_sku_id, p_qty, p_uom, p_returned_by, p_note);
 
-  v_lot_code := v_sku_code || '-' || to_char(current_date, 'YYMMDD') || '-' || lpad(v_seq::text, 3, '0');
-
-  insert into lots (lot_code, sku_id, qty_received, balance, uom, received_by, note, source)
-  values (v_lot_code, p_sku_id, p_qty, p_qty, p_uom, p_returned_by, p_note, 'return')
-  returning * into v_lot;
-
-  insert into transactions (type, lot_id, qty, uom, performed_by)
-  values ('return', v_lot.id, p_qty, p_uom, p_returned_by);
-
-  return v_lot;
+  return v_sku;
 end;
 $$;
 
--- Issuing: the scan-to-deduct step. Locks the lot row so two staff scanning
--- the same lot at once cannot both succeed against a balance that is no
--- longer there. Branches exactly like the workflow diagram: an exact match
--- closes the request quietly; a mismatch still deducts stock but leaves a
--- discrepancy record rather than silently accepting or blocking it.
+-- Issuing: the scan-to-deduct step (rewritten 2026-09-08 for the
+-- one-QR-per-item model — was p_lot_id against a lot's balance, now
+-- p_sku_id against the item's running total). Locks the sku row so two
+-- staff issuing the same item at once cannot both succeed against stock
+-- that is no longer there. Branches exactly like the workflow diagram: an
+-- exact match closes the request quietly; a mismatch still deducts stock
+-- but leaves a discrepancy record rather than silently accepting or
+-- blocking it.
+drop function if exists issue_stock(uuid, uuid, numeric, text);
+
 create or replace function issue_stock(
-  p_lot_id uuid, p_request_id uuid, p_actual_qty numeric, p_performed_by text default null
+  p_sku_id uuid, p_request_id uuid, p_actual_qty numeric, p_performed_by text default null
 ) returns jsonb
 language plpgsql
 as $$
 declare
-  v_lot lots;
+  v_sku skus;
   v_request requests;
   v_txn transactions;
   v_discrepancy discrepancies;
@@ -422,13 +463,13 @@ begin
     raise exception 'Quantity must be greater than zero';
   end if;
 
-  select * into v_lot from lots where id = p_lot_id for update;
+  select * into v_sku from skus where id = p_sku_id for update;
   if not found then
-    raise exception 'Lot not found';
+    raise exception 'Item not found';
   end if;
-  if v_lot.balance < p_actual_qty then
-    raise exception 'Insufficient balance on lot %: % available, % requested',
-      v_lot.lot_code, v_lot.balance, p_actual_qty;
+  if v_sku.qty_on_hand < p_actual_qty then
+    raise exception 'Insufficient stock for %: % available, % requested',
+      v_sku.sku_code, v_sku.qty_on_hand, p_actual_qty;
   end if;
 
   select * into v_request from requests where id = p_request_id for update;
@@ -439,10 +480,10 @@ begin
     raise exception 'Request % is already fulfilled', v_request.request_code;
   end if;
 
-  update lots set balance = balance - p_actual_qty where id = p_lot_id;
+  update skus set qty_on_hand = qty_on_hand - p_actual_qty where id = p_sku_id;
 
-  insert into transactions (type, lot_id, request_id, qty, uom, performed_by)
-  values ('issue', p_lot_id, p_request_id, p_actual_qty, v_lot.uom, p_performed_by)
+  insert into transactions (type, sku_id, request_id, qty, uom, performed_by)
+  values ('issue', p_sku_id, p_request_id, p_actual_qty, v_sku.base_uom, p_performed_by)
   returning * into v_txn;
 
   if p_actual_qty <> v_request.qty_requested then

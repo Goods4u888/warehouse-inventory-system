@@ -121,6 +121,10 @@ const DB = {
     return data;
   },
 
+  // LEGACY — stock_by_lot still exists purely so pre-migration batch history
+  // stays queryable; nothing in the app calls this anymore (scanning looks
+  // an item up by sku_code via findSkuByCode below, not by lot_code). Left
+  // here in case it's ever useful for a one-off lookup.
   async stockByLot(skuId = null) {
     let q = supabaseClient.from('stock_by_lot').select('*');
     if (skuId) q = q.eq('sku_id', skuId);
@@ -129,11 +133,13 @@ const DB = {
     return data;
   },
 
-  async findLotByCode(lotCode) {
+  // Every item now has one permanent QR sticker encoding its sku_code —
+  // this is what the scan screen calls to look an item up.
+  async findSkuByCode(skuCode) {
     const { data, error } = await supabaseClient
-      .from('stock_by_lot')
+      .from('stock_by_sku')
       .select('*')
-      .eq('lot_code', lotCode.trim())
+      .eq('sku_code', skuCode.trim())
       .maybeSingle();
     if (error) throw error;
     return data;
@@ -153,10 +159,10 @@ const DB = {
   },
 
   // ---- Returns ----------------------------------------------------------------
-  // Materials that were issued/taken out coming back into stock. Creates a
-  // new lot (own lot_code/QR sticker, source='return') just like receiving
-  // does — see return_stock() in schema.sql for why. Freeform: not tied to
-  // a specific original request.
+  // Materials that were issued/taken out coming back into stock. Adds
+  // straight onto the item's qty_on_hand, same as receiving — see
+  // return_stock() in schema.sql. Freeform: not tied to a specific original
+  // request.
   async returnStock({ skuId, qty, uom, returnedBy, note }) {
     const { data, error } = await supabaseClient.rpc('return_stock', {
       p_sku_id: skuId,
@@ -222,9 +228,9 @@ const DB = {
   },
 
   // ---- Issuing (scan-to-deduct) -----------------------------------------------
-  async issueStock({ lotId, requestId, actualQty, performedBy }) {
+  async issueStock({ skuId, requestId, actualQty, performedBy }) {
     const { data, error } = await supabaseClient.rpc('issue_stock', {
-      p_lot_id: lotId,
+      p_sku_id: skuId,
       p_request_id: requestId,
       p_actual_qty: actualQty,
       p_performed_by: performedBy || null,

@@ -6,10 +6,11 @@
 
 const QR = {
   /**
-   * Render a QR code for a lot code into a container element.
-   * Encodes the lot code ONLY — never quantity, per the spec: a printed
-   * sticker can't be updated once it's on the batch, so nothing mutable
-   * belongs in the code itself.
+   * Render a QR code for an item into a container element.
+   * Encodes the item's sku_code ONLY — never a quantity, per the original
+   * per-lot spec this carries forward: the sticker is permanent (printed
+   * once, stuck on a bin/shelf, scanned for the item's whole life), so
+   * nothing mutable belongs in the code itself.
    */
   renderInto(el, text, size = 168) {
     el.innerHTML = '';
@@ -23,20 +24,20 @@ const QR = {
   },
 
   /**
-   * Build the printable sticker markup for a lot: QR + human-readable
-   * SKU name, lot code, and receive date, sized for a common label printer.
-   * `label` defaults to "Received" (the ordinary receiving flow); the
-   * return flow passes "Returned" instead so a returned lot's sticker
-   * doesn't read as a fresh delivery.
+   * Build the printable sticker markup for an item: QR + human-readable
+   * SKU name/code, sized for a common label printer. One sticker per item,
+   * good for the item's whole life — not tied to any single receive/return
+   * event — so `eventLabel`/`eventDate` are optional and the date line is
+   * omitted entirely when they're not supplied (e.g. printing from Manage
+   * Items rather than right after receiving/returning stock).
    */
-  stickerHtml({ lotCode, skuCode, skuName, receiveDate, label = 'Received' }) {
+  stickerHtml({ skuCode, skuName, eventLabel, eventDate }) {
     return `
       <div class="sticker">
-        <div class="sticker-qr" id="sticker-qr-${lotCode}"></div>
+        <div class="sticker-qr" id="sticker-qr-${skuCode}"></div>
         <div class="sticker-text">
           <div class="sticker-sku">${skuCode} · ${skuName}</div>
-          <div class="sticker-lot">${lotCode}</div>
-          <div class="sticker-date">${label} ${receiveDate}</div>
+          ${eventLabel && eventDate ? `<div class="sticker-date">${eventLabel} ${eventDate}</div>` : ''}
         </div>
       </div>`;
   },

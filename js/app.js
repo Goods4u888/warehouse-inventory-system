@@ -399,6 +399,12 @@ function renderManageItemsLists() {
   document.querySelectorAll('[data-mi-toggle]').forEach((btn) => {
     btn.addEventListener('click', () => toggleSkuActive(btn.dataset.miToggle, btn.dataset.toActive === 'true'));
   });
+  document.querySelectorAll('[data-mi-print]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const sku = miAllSkus.find((s) => s.id === btn.dataset.miPrint);
+      if (sku) printSkuSticker(sku);
+    });
+  });
 }
 
 function miRowHtml(s) {
@@ -415,12 +421,25 @@ function miRowHtml(s) {
       </div>
       <div class="card-row" style="margin-top:var(--s3)">
         <button class="btn btn-outline btn-sm" data-mi-edit="${s.id}">${icon('pencil', 14)}<span>${t('btnEdit')}</span></button>
+        <button class="btn btn-outline btn-sm" data-mi-print="${s.id}">${icon('printer', 14)}<span>${t('btnPrintSticker')}</span></button>
         ${s.is_active
           ? `<button class="btn btn-ghost btn-sm" data-mi-toggle="${s.id}" data-to-active="false">${icon('xCircle', 14)}<span>${t('btnDeactivate')}</span></button>`
           : `<button class="btn btn-ghost btn-sm" data-mi-toggle="${s.id}" data-to-active="true">${icon('checkCircle', 14)}<span>${t('btnActivate')}</span></button>`}
       </div>
     </div>
   `;
+}
+
+// Print an item's permanent sticker on demand from Manage Items — not tied
+// to a receive/return event. Renders into a dedicated print-only container
+// (see .admin-print-sticker in app.css and admin.html) rather than reusing
+// .print-sheet, since that one carries request.html's letterhead/table
+// styling which doesn't apply here.
+function printSkuSticker(sku) {
+  const box = document.getElementById('admin-print-sticker');
+  box.innerHTML = QR.stickerHtml({ skuCode: sku.sku_code, skuName: sku.name });
+  QR.renderInto(document.getElementById(`sticker-qr-${sku.sku_code}`), sku.sku_code, 120);
+  window.print();
 }
 
 function startEditSku(id) {
@@ -497,12 +516,11 @@ document.getElementById('form-receive').addEventListener('submit', async (e) => 
   const label = document.getElementById('rc-submit-label');
   btn.disabled = true; label.textContent = t('btnGenerating');
   try {
-    const lot = await DB.receiveStock({ skuId, qty, uom, receivedBy, supplierRef });
-    const sku = activeSkus.find((s) => s.id === skuId);
-    renderReceiveResult(lot, sku);
+    const sku = await DB.receiveStock({ skuId, qty, uom, receivedBy, supplierRef });
+    renderReceiveResult(sku, qty, uom);
     e.target.reset();
     refreshReceiveSkuOptions();
-    toast(t('toastLotReceived', lot.lot_code), 'success');
+    toast(t('toastStockReceived', fmtQty(qty), escapeHtml(uom), escapeHtml(sku.sku_code)), 'success');
   } catch (err) {
     errEl.innerHTML = `<div class="form-error">${escapeHtml(err.message || 'Could not receive stock')}</div>`;
   } finally {
@@ -510,15 +528,20 @@ document.getElementById('form-receive').addEventListener('submit', async (e) => 
   }
 });
 
-function renderReceiveResult(lot, sku) {
+// sku here is the *updated* row receive_stock() returned (qty_on_hand
+// already includes this delivery) — qty/uom are this specific delivery's
+// amount, shown as a confirmation line above the item's one permanent
+// sticker (which itself carries no quantity — see qr.js).
+function renderReceiveResult(sku, qty, uom) {
   const box = document.getElementById('receive-result');
   box.innerHTML = `
     <div class="card">
       <div class="eyebrow">${t('stickerReady')}</div>
-      ${QR.stickerHtml({ lotCode: lot.lot_code, skuCode: sku.sku_code, skuName: sku.name, receiveDate: fmtDate(lot.receive_date) })}
+      <p class="field-hint">${t('receiveConfirmLine', fmtQty(qty), escapeHtml(uom), fmtQty(sku.qty_on_hand))}</p>
+      ${QR.stickerHtml({ skuCode: sku.sku_code, skuName: sku.name })}
       <button class="btn btn-outline btn-block" style="margin-top:var(--s4)" id="btn-print-sticker">${icon('printer', 16)}<span>${t('btnPrintSticker')}</span></button>
     </div>`;
-  QR.renderInto(document.getElementById(`sticker-qr-${lot.lot_code}`), lot.lot_code, 120);
+  QR.renderInto(document.getElementById(`sticker-qr-${sku.sku_code}`), sku.sku_code, 120);
   document.getElementById('btn-print-sticker').addEventListener('click', () => window.print());
 }
 
@@ -542,7 +565,8 @@ function updateReceiveSectionTitle() {
 }
 
 // ============================================================================
-// RETURN (materials coming back into stock — its own lot, like receiving)
+// RETURN (materials coming back into stock — adds to the item's running
+// total, same as receiving)
 // ============================================================================
 let returnActiveSkus = [];
 
@@ -584,12 +608,11 @@ document.getElementById('form-return').addEventListener('submit', async (e) => {
   const label = document.getElementById('rt-submit-label');
   btn.disabled = true; label.textContent = t('btnGenerating');
   try {
-    const lot = await DB.returnStock({ skuId, qty, uom, returnedBy, note });
-    const sku = returnActiveSkus.find((s) => s.id === skuId);
-    renderReturnResult(lot, sku);
+    const sku = await DB.returnStock({ skuId, qty, uom, returnedBy, note });
+    renderReturnResult(sku, qty, uom);
     e.target.reset();
     refreshReturnSkuOptions();
-    toast(t('toastLotReturned', lot.lot_code), 'success');
+    toast(t('toastStockReturned', fmtQty(qty), escapeHtml(uom), escapeHtml(sku.sku_code)), 'success');
   } catch (err) {
     errEl.innerHTML = `<div class="form-error">${escapeHtml(err.message || 'Could not record return')}</div>`;
   } finally {
@@ -597,15 +620,16 @@ document.getElementById('form-return').addEventListener('submit', async (e) => {
   }
 });
 
-function renderReturnResult(lot, sku) {
+function renderReturnResult(sku, qty, uom) {
   const box = document.getElementById('return-result');
   box.innerHTML = `
     <div class="card">
       <div class="eyebrow">${t('stickerReady')}</div>
-      ${QR.stickerHtml({ lotCode: lot.lot_code, skuCode: sku.sku_code, skuName: sku.name, receiveDate: fmtDate(lot.receive_date), label: 'Returned' })}
+      <p class="field-hint">${t('returnConfirmLine', fmtQty(qty), escapeHtml(uom), fmtQty(sku.qty_on_hand))}</p>
+      ${QR.stickerHtml({ skuCode: sku.sku_code, skuName: sku.name })}
       <button class="btn btn-outline btn-block" style="margin-top:var(--s4)" id="btn-print-return-sticker">${icon('printer', 16)}<span>${t('btnPrintSticker')}</span></button>
     </div>`;
-  QR.renderInto(document.getElementById(`sticker-qr-${lot.lot_code}`), lot.lot_code, 120);
+  QR.renderInto(document.getElementById(`sticker-qr-${sku.sku_code}`), sku.sku_code, 120);
   document.getElementById('btn-print-return-sticker').addEventListener('click', () => window.print());
 }
 
@@ -622,7 +646,7 @@ function resetScanView() {
 
   const video = document.getElementById('scan-video');
   const canvas = document.getElementById('scan-canvas');
-  QR.startScanner(video, canvas, onLotScanned, (err) => {
+  QR.startScanner(video, canvas, onItemScanned, (err) => {
     status.textContent = t('scanHintNoCamera');
   }, () => {
     status.textContent = t('scanHintNotRecognized');
@@ -631,72 +655,109 @@ function resetScanView() {
 
 document.getElementById('btn-lookup-lot').addEventListener('click', () => {
   const code = document.getElementById('scan-manual').value.trim();
-  if (code) onLotScanned(code);
+  if (code) onItemScanned(code);
 });
 
-async function onLotScanned(lotCode) {
+async function onItemScanned(code) {
   QR.stopScanner(document.getElementById('scan-video'));
-  document.getElementById('scan-status').textContent = t('scanLookingUp', lotCode);
+  document.getElementById('scan-status').textContent = t('scanLookingUp', code);
   try {
-    const lot = await DB.findLotByCode(lotCode);
-    if (!lot) {
-      toast(t('toastNoLot', lotCode), 'error');
+    const sku = await DB.findSkuByCode(code);
+    if (!sku) {
+      toast(t('toastItemNotFound', code), 'error');
       resetScanView();
       return;
     }
     const openRequests = await DB.listRequests({});
-    const forThisSku = openRequests.filter((r) => r.sku_id === lot.sku_id && r.status !== 'fulfilled' && r.status !== 'cancelled');
-    renderIssueStep(lot, forThisSku);
+    const forThisSku = openRequests.filter((r) => r.sku_id === sku.sku_id && r.status !== 'fulfilled' && r.status !== 'cancelled');
+    renderScannedItem(sku, forThisSku);
   } catch (err) {
     toast(err.message || 'Lookup failed', 'error');
     resetScanView();
   }
 }
 
-function renderIssueStep(lot, openRequests) {
+// One permanent sticker per item now covers both directions: issuing
+// (deduct, against an open request) and receiving more (add) — this is the
+// screen that lets scanning the same code do either. Defaults to the Issue
+// tab when there's an open request to fulfill, otherwise to Receive (there's
+// nothing to issue against, so that's the useful action).
+function renderScannedItem(sku, openRequests) {
   document.getElementById('scan-step-camera').hidden = true;
   const box = document.getElementById('scan-step-issue');
   box.hidden = false;
+  const defaultAction = openRequests.length ? 'issue' : 'receive';
   box.innerHTML = `
     <div class="card">
-      <div class="eyebrow">${t('lotFound')}</div>
-      <div class="card-title">${escapeHtml(lot.name)}</div>
-      <div class="card-meta mono">${escapeHtml(lot.lot_code)} · ${escapeHtml(lot.sku_code)}</div>
+      <div class="eyebrow">${t('itemFound')}</div>
+      <div class="card-title">${escapeHtml(sku.name)}</div>
+      <div class="card-meta mono">${escapeHtml(sku.sku_code)}</div>
       <div class="card-row" style="margin-top:var(--s3)">
-        <span class="chip chip-cat-${catClass(lot.category)}">${icon(catIcon(lot.category), 12)}${escapeHtml(lot.category)}</span>
-        ${lot.source === 'return' ? `<span class="chip chip-neutral">${icon('repeat', 12)}${escapeHtml(t('returnedLotBadge'))}</span>` : ''}
-        <span class="stat-figure" style="font-size:var(--t-card)">${t('unitLeft', fmtQty(lot.balance), escapeHtml(lot.uom))}</span>
+        <span class="chip chip-cat-${catClass(sku.category)}">${icon(catIcon(sku.category), 12)}${escapeHtml(sku.category)}</span>
+        <span class="stat-figure" style="font-size:var(--t-card)">${t('unitOnHand', fmtQty(sku.on_hand), escapeHtml(sku.base_uom))}</span>
       </div>
     </div>
 
-    ${openRequests.length ? `
-      <div class="field" style="margin-top:var(--s5)">
-        <label for="issue-request">${t('fieldFulfillWhich')}</label>
-        <select id="issue-request">
-          ${openRequests.map((r) => `<option value="${r.id}" data-qty="${r.qty_requested}">${escapeHtml(t('optionRequestLine', r.request_code, r.requester_name, fmtQty(r.qty_requested), lot.uom))}</option>`).join('')}
-        </select>
+    <div class="segmented" id="scan-action-tabs" role="tablist" style="margin-top:var(--s5)">
+      <button data-action="issue" aria-pressed="${defaultAction === 'issue'}" data-icon="check"><span>${t('scanActionIssue')}</span></button>
+      <button data-action="receive" aria-pressed="${defaultAction === 'receive'}" data-icon="package"><span>${t('scanActionReceive')}</span></button>
+    </div>
+
+    <div id="scan-action-issue" ${defaultAction === 'issue' ? '' : 'hidden'}>
+      ${openRequests.length ? `
+        <div class="field" style="margin-top:var(--s4)">
+          <label for="issue-request">${t('fieldFulfillWhich')}</label>
+          <select id="issue-request">
+            ${openRequests.map((r) => `<option value="${r.id}" data-qty="${r.qty_requested}">${escapeHtml(t('optionRequestLine', r.request_code, r.requester_name, fmtQty(r.qty_requested), sku.base_uom))}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field">
+          <label for="issue-qty">${t('fieldActualQty')}</label>
+          <input type="number" id="issue-qty" min="0.0001" step="any" max="${sku.on_hand}">
+          <div class="field-hint" id="issue-qty-hint"></div>
+        </div>
+        <div class="field">
+          <label for="issue-picked-up-by">${t('fieldPickedUpBy')}</label>
+          <input type="text" id="issue-picked-up-by" placeholder="${escapeHtml(t('fieldReceivedByPh'))}">
+        </div>
+        <div id="issue-error"></div>
+        <button class="btn btn-primary btn-block" id="btn-confirm-issue">${icon('check', 16)}<span id="issue-confirm-label">${t('btnConfirmIssue')}</span></button>
+      ` : `
+        <div class="empty" style="margin-top:var(--s4)">
+          <p>${t('emptyNoOpenRequest')}</p>
+        </div>
+      `}
+    </div>
+
+    <div id="scan-action-receive" ${defaultAction === 'receive' ? '' : 'hidden'}>
+      <div class="field" style="margin-top:var(--s4)">
+        <label for="scan-rc-qty">${t('fieldQtyReceived')}</label>
+        <input type="number" id="scan-rc-qty" min="0.0001" step="any" value="1">
       </div>
       <div class="field">
-        <label for="issue-qty">${t('fieldActualQty')}</label>
-        <input type="number" id="issue-qty" min="0.0001" step="any" max="${lot.balance}">
-        <div class="field-hint" id="issue-qty-hint"></div>
+        <label for="scan-rc-uom">${t('fieldUnit')}</label>
+        <input type="text" id="scan-rc-uom" value="${escapeHtml(sku.base_uom)}">
       </div>
       <div class="field">
-        <label for="issue-picked-up-by">${t('fieldPickedUpBy')}</label>
-        <input type="text" id="issue-picked-up-by" placeholder="${escapeHtml(t('fieldReceivedByPh'))}">
+        <label for="scan-rc-by">${t('fieldReceivedBy')}</label>
+        <input type="text" id="scan-rc-by" placeholder="${escapeHtml(t('fieldReceivedByPh'))}">
       </div>
-      <div id="issue-error"></div>
-      <button class="btn btn-primary btn-block" id="btn-confirm-issue">${icon('check', 16)}<span id="issue-confirm-label">${t('btnConfirmIssue')}</span></button>
-      <button class="btn btn-ghost btn-block" id="btn-scan-again" style="margin-top:var(--s2)">${icon('repeat', 16)}<span>${t('btnScanDifferent')}</span></button>
-    ` : `
-      <div class="empty" style="margin-top:var(--s5)">
-        <p>${t('emptyNoOpenRequest')}</p>
-        <button class="btn btn-outline" id="btn-scan-again">${icon('repeat', 16)}<span>${t('btnScanDifferent')}</span></button>
-      </div>
-    `}
+      <div id="scan-rc-error"></div>
+      <button class="btn btn-primary btn-block" id="btn-confirm-scan-receive">${icon('plusCircle', 16)}<span id="scan-rc-confirm-label">${t('btnConfirmReceive')}</span></button>
+    </div>
+
+    <button class="btn btn-ghost btn-block" id="btn-scan-again" style="margin-top:var(--s4)">${icon('repeat', 16)}<span>${t('btnScanDifferent')}</span></button>
   `;
 
-  document.getElementById('btn-scan-again')?.addEventListener('click', resetScanView);
+  document.getElementById('btn-scan-again').addEventListener('click', resetScanView);
+
+  document.querySelectorAll('#scan-action-tabs button').forEach((b) => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('#scan-action-tabs button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+      document.getElementById('scan-action-issue').hidden = b.dataset.action !== 'issue';
+      document.getElementById('scan-action-receive').hidden = b.dataset.action !== 'receive';
+    });
+  });
 
   const reqSel = document.getElementById('issue-request');
   const qtyInput = document.getElementById('issue-qty');
@@ -704,7 +765,7 @@ function renderIssueStep(lot, openRequests) {
     const syncDefault = () => {
       const opt = reqSel.options[reqSel.selectedIndex];
       qtyInput.value = opt.dataset.qty;
-      document.getElementById('issue-qty-hint').textContent = t('hintRequested', fmtQty(opt.dataset.qty), lot.uom);
+      document.getElementById('issue-qty-hint').textContent = t('hintRequested', fmtQty(opt.dataset.qty), sku.base_uom);
     };
     reqSel.addEventListener('change', syncDefault);
     syncDefault();
@@ -727,7 +788,7 @@ function renderIssueStep(lot, openRequests) {
     const label = document.getElementById('issue-confirm-label');
     btn.disabled = true; label.textContent = t('btnConfirming');
     try {
-      const result = await DB.issueStock({ lotId: lot.lot_id, requestId, actualQty, performedBy });
+      const result = await DB.issueStock({ skuId: sku.sku_id, requestId, actualQty, performedBy });
       if (result.has_discrepancy) {
         toast(t('toastIssuedDiscrepancy', fmtQty(requestedQty), fmtQty(actualQty)), 'error');
       } else {
@@ -737,6 +798,31 @@ function renderIssueStep(lot, openRequests) {
     } catch (err) {
       errEl.innerHTML = `<div class="form-error">${escapeHtml(err.message || 'Could not confirm issue')}</div>`;
       btn.disabled = false; label.textContent = t('btnConfirmIssue');
+    }
+  });
+
+  document.getElementById('btn-confirm-scan-receive')?.addEventListener('click', async () => {
+    const errEl = document.getElementById('scan-rc-error');
+    errEl.innerHTML = '';
+    const qty = parseFloat(document.getElementById('scan-rc-qty').value);
+    const uom = document.getElementById('scan-rc-uom').value.trim();
+    const receivedBy = document.getElementById('scan-rc-by').value.trim();
+
+    if (!(qty > 0) || !uom) {
+      errEl.innerHTML = `<div class="form-error">${escapeHtml(t('fieldRequiredGeneric'))}</div>`;
+      return;
+    }
+
+    const btn = document.getElementById('btn-confirm-scan-receive');
+    const label = document.getElementById('scan-rc-confirm-label');
+    btn.disabled = true; label.textContent = t('btnConfirming');
+    try {
+      const updated = await DB.receiveStock({ skuId: sku.sku_id, qty, uom, receivedBy, supplierRef: null });
+      toast(t('toastStockReceived', fmtQty(qty), escapeHtml(uom), escapeHtml(updated.sku_code)), 'success');
+      resetScanView();
+    } catch (err) {
+      errEl.innerHTML = `<div class="form-error">${escapeHtml(err.message || 'Could not receive stock')}</div>`;
+      btn.disabled = false; label.textContent = t('btnConfirmReceive');
     }
   });
 }
@@ -932,8 +1018,8 @@ document.getElementById('report-search').addEventListener('input', (e) => {
 function reportSearchFields(kind) {
   return {
     stock: ['sku_code', 'name', 'category'],
-    movement: ['sku_code', 'sku_name', 'lot_code', 'performed_by', 'request_code', 'type'],
-    discrepancy: ['request_code', 'requester_name', 'sku_code', 'sku_name', 'lot_code'],
+    movement: ['sku_code', 'sku_name', 'performed_by', 'request_code', 'type'],
+    discrepancy: ['request_code', 'requester_name', 'sku_code', 'sku_name'],
     lowstock: ['sku_code', 'name', 'category'],
   }[kind] || [];
 }
@@ -1001,14 +1087,14 @@ function renderReportTable(kind) {
     );
   } else if (kind === 'movement') {
     body.innerHTML = tableHtml(
-      [t('colWhen'), t('colType'), t('colSku'), t('colLot'), t('colQty'), t('colBy'), t('colRequest')],
-      rows.map((r) => [fmtDateTime(r.created_at), r.type, `${r.sku_code} — ${r.sku_name}`, r.lot_code,
+      [t('colWhen'), t('colType'), t('colSku'), t('colQty'), t('colBy'), t('colRequest')],
+      rows.map((r) => [fmtDateTime(r.created_at), r.type, `${r.sku_code} — ${r.sku_name}`,
         `<span class="num">${fmtQty(r.qty)} ${r.uom}</span>`, r.performed_by || '—', r.request_code || '—']),
     );
   } else if (kind === 'discrepancy') {
     body.innerHTML = tableHtml(
-      [t('colWhen'), t('colRequest'), t('colSku'), t('colLot'), t('colRequested'), t('colActual'), t('colVariance')],
-      rows.map((r) => [fmtDateTime(r.created_at), `${r.request_code} (${r.requester_name})`, `${r.sku_code} — ${r.sku_name}`, r.lot_code,
+      [t('colWhen'), t('colRequest'), t('colSku'), t('colRequested'), t('colActual'), t('colVariance')],
+      rows.map((r) => [fmtDateTime(r.created_at), `${r.request_code} (${r.requester_name})`, `${r.sku_code} — ${r.sku_name}`,
         `<span class="num">${fmtQty(r.requested_qty)}</span>`, `<span class="num">${fmtQty(r.actual_qty)}</span>`,
         `<span class="num" style="color:var(--discrepancy)">${r.variance > 0 ? '+' : ''}${fmtQty(r.variance)}</span>`]),
     );

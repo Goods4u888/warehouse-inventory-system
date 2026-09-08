@@ -305,7 +305,6 @@ main {
   padding: var(--s3); width: fit-content;
 }
 .sticker-sku { font-weight: 700; font-size: 13px; }
-.sticker-lot { font-family: var(--mono); font-size: 12px; margin-top: 2px; }
 .sticker-date { font-size: 11px; color: #555; margin-top: 2px; }
 
 /* ---- Tables (reports) -------------------------------------------------------------- */
@@ -365,8 +364,16 @@ td.num, th.num { text-align: right; font-family: var(--mono); }
    Hidden here, shown only under @media print below. */
 .print-sheet { display: none; }
 
+/* .admin-print-sticker (admin.html) is the print-only target for the
+   Manage Items "Print sticker" action — a one-off reprint of an item's
+   permanent QR, populated just before window.print() (see
+   printSkuSticker() in app.js). Same hide/show pattern as .print-sheet
+   above, kept as its own element since it carries none of that one's
+   letterhead/table styling. */
+.admin-print-sticker { display: none; }
+
 @media print {
-  .header, .tabbar, .btn, .toast, .no-print, .login-screen { display: none !important; }
+  .header, .tabbar, .btn, .toast, .no-print, .login-screen, .scrim { display: none !important; }
   body { background: #fff; }
   main { padding: 0; }
   #print-area {
@@ -376,6 +383,7 @@ td.num, th.num { text-align: right; font-family: var(--mono); }
   }
   .confirm-code { background: #fff !important; color: #111 !important; border: 1px solid #ccc; }
   .print-sheet { display: block; color: #111; }
+  .admin-print-sticker { display: block; color: #111; }
 }
 
 /* ---- Printable requisition slip (request.html, print/PDF only) — modeled
