@@ -83,6 +83,9 @@ function renderPrintSheet({ requestCode, createdAt, requesterName, department, w
   document.getElementById('print-department').textContent = department || t('noDepartment');
   document.getElementById('print-name').textContent = requesterName;
   document.getElementById('print-workarea').textContent = workArea;
+  // Repeats at the bottom of every printed page (see .print-sheet-footer) so
+  // a multi-page slip stays identifiable if pages get separated.
+  document.getElementById('print-footer').textContent = t('printFooterNote', requestCode);
 
   const rows = submittedItems.length
     ? submittedItems.map((it, i) => `

@@ -183,6 +183,7 @@ const I18N = {
     sigApprover: 'Approver (supervisor)',
     sigIssuer: 'Materials issued by',
     sigReceiver: 'Materials received by',
+    printFooterNote: (code) => `Request ${code}`,
 
     // Requests: free-text ("general") requests alongside item requests
     generalRequest: 'General request',
@@ -371,6 +372,7 @@ const I18N = {
     sigApprover: 'ผู้ตรวจสอบ (หัวหน้า)',
     sigIssuer: 'ผู้จ่ายวัสดุ/อุปกรณ์',
     sigReceiver: 'ผู้รับวัสดุ/อุปกรณ์',
+    printFooterNote: (code) => `คำขอเลขที่ ${code}`,
 
     generalRequest: 'คำขอทั่วไป',
     colDepartment: 'แผนก',

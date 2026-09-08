@@ -377,26 +377,43 @@ td.num, th.num { text-align: right; font-family: var(--mono); }
 }
 .print-sheet-title { font-size: var(--t-sec); font-weight: 700; }
 .print-sheet-code { font-family: var(--mono); font-size: var(--t-meta); }
+/* table-layout: fixed keeps column widths identical across every row
+   regardless of content length — with the default "auto" layout, a long
+   wrapped label in one row (e.g. the Thai area/job header) could pull that
+   column's width differently row-to-row, which is exactly the kind of
+   mismatch that made cell borders look broken/incomplete in print. Borders
+   are drawn with box-shadow (inset) rather than the border property for the
+   same reason: Chrome's print rasterizer has a long-standing bug where
+   collapsed 1px table borders render with missing/dashed segments — an
+   inset box-shadow paints the same visual line without going through that
+   border-collapse code path, so it survives printing/PDF export intact. */
 .print-sheet-meta {
-  width: 100%; border-collapse: collapse; margin-bottom: var(--s4); font-size: var(--t-meta);
+  width: 100%; table-layout: fixed; border-collapse: collapse; margin-bottom: var(--s4); font-size: var(--t-meta);
 }
 .print-sheet-meta th, .print-sheet-meta td {
-  border: 1px solid #999; padding: var(--s2) var(--s3); text-align: left; vertical-align: top;
+  /* white-space: normal overrides the site-wide "th, td { white-space:
+     nowrap }" rule (used by the admin Reports tables) — without it, that
+     global rule silently wins and suppresses wrapping entirely regardless
+     of word-break, which is what let the long area/job label overflow and
+     visually collide with the next cell's text. */
+  box-shadow: inset 0 0 0 1px #999; padding: var(--s2) var(--s3); text-align: left; vertical-align: top;
+  white-space: normal; word-break: break-word;
 }
-.print-sheet-meta th { width: 18%; background: #f2f2f2; font-weight: 600; white-space: nowrap; }
+.print-sheet-meta th { width: 18%; background: #f2f2f2; font-weight: 600; }
 .print-sheet-meta td { width: 32%; }
 .print-sheet-items {
-  width: 100%; border-collapse: collapse; margin-bottom: var(--s5); font-size: var(--t-meta);
+  width: 100%; table-layout: fixed; border-collapse: collapse; margin-bottom: var(--s5); font-size: var(--t-meta);
 }
 .print-sheet-items th, .print-sheet-items td {
-  border: 1px solid #999; padding: var(--s2) var(--s3); text-align: left;
+  box-shadow: inset 0 0 0 1px #999; padding: var(--s2) var(--s3); text-align: left;
+  white-space: normal; word-break: break-word;
 }
 .print-sheet-items th { background: #f2f2f2; font-weight: 600; }
 .print-sheet-items .print-col-no { width: 8%; text-align: center; }
 .print-sheet-items .print-col-qty { width: 12%; text-align: right; }
 .print-sheet-items .print-col-unit { width: 14%; }
 .print-sheet-notes {
-  font-size: var(--t-meta); margin: calc(-1 * var(--s4)) 0 var(--s5);
+  font-size: var(--t-meta); margin: 0 0 var(--s5);
   padding-bottom: var(--s3); border-bottom: 1px solid #999;
 }
 .print-sheet-notes strong { display: block; margin-bottom: var(--s1); }
@@ -406,6 +423,23 @@ td.num, th.num { text-align: right; font-family: var(--mono); }
 .print-sig-box { text-align: center; }
 .print-sig-line { height: 48px; border-bottom: 1px solid #111; }
 .print-sig-label { margin-top: var(--s2); font-size: var(--t-meta); }
+/* Repeats on every physical printed page (Chrome/Edge keep position:fixed
+   elements pinned per page when printing) — shows the request number so a
+   multi-page slip stays identifiable if pages get separated. Real "Page X
+   of Y" numbering isn't something a web page's own CSS/JS can compute
+   (browsers don't expose pagination info to page content); the built-in
+   equivalent is the browser's own Print dialog -> "More settings" ->
+   Headers and footers, which prints real page numbers automatically. */
+.print-sheet-footer {
+  display: none;
+}
+@media print {
+  .print-sheet-footer {
+    display: block; position: fixed; bottom: 0; left: 0; right: 0;
+    text-align: center; font-size: var(--t-micro); color: #666;
+    border-top: 1px solid #ccc; padding-top: var(--s2);
+  }
+}
 
 /* ---- Landing page (index.html) — a hub screen, same component library as
    the rest of the app (header, eyebrow, chip) plus one new pattern: a grid
