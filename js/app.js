@@ -624,6 +624,8 @@ function resetScanView() {
   const canvas = document.getElementById('scan-canvas');
   QR.startScanner(video, canvas, onLotScanned, (err) => {
     status.textContent = t('scanHintNoCamera');
+  }, () => {
+    status.textContent = t('scanHintNotRecognized');
   });
 }
 

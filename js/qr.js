@@ -45,7 +45,13 @@ const QR = {
   _stream: null,
   _raf: null,
 
-  async startScanner(videoEl, canvasEl, onDetect, onError) {
+  // How long to let the camera try before telling the user it can't read the
+  // code — long enough that normal aiming/focusing isn't mistaken for
+  // failure, short enough that someone stuck on a damaged/glare-covered
+  // sticker isn't left staring at a silent camera preview.
+  NOT_RECOGNIZED_MS: 8000,
+
+  async startScanner(videoEl, canvasEl, onDetect, onError, onNotRecognized) {
     try {
       // Ask for a higher-resolution stream with continuous autofocus — plain
       // `{ facingMode: 'environment' }` lets the browser pick whatever it
@@ -75,6 +81,8 @@ const QR = {
       await videoEl.play();
 
       const ctx = canvasEl.getContext('2d', { willReadFrequently: true });
+      const startedAt = Date.now();
+      let notRecognizedFired = false;
       const tick = () => {
         try {
           if (videoEl.readyState === videoEl.HAVE_ENOUGH_DATA) {
@@ -94,6 +102,14 @@ const QR = {
               onDetect(code.data.trim());
               return; // caller decides whether to restart
             }
+          }
+          // Most frames simply won't line up on a code yet — that's normal
+          // mid-aim, not a failure, so this only fires once after a real
+          // stretch of no successful reads (and keeps scanning afterwards,
+          // in case they reposition and it succeeds a moment later).
+          if (!notRecognizedFired && Date.now() - startedAt > QR.NOT_RECOGNIZED_MS) {
+            notRecognizedFired = true;
+            onNotRecognized && onNotRecognized();
           }
           this._raf = requestAnimationFrame(tick);
         } catch (err) {
