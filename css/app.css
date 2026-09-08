@@ -347,15 +347,65 @@ td.num, th.num { text-align: right; font-family: var(--mono); }
 }
 
 /* ---- Print ------------------------------------------------------------------------------ */
+/* .print-sheet (request.html) is the printable requisition slip — built to
+   stand alone on paper, so it never needs #print-area's on-screen card look.
+   Hidden here, shown only under @media print below. */
+.print-sheet { display: none; }
+
 @media print {
   .header, .tabbar, .btn, .toast, .no-print, .login-screen { display: none !important; }
   body { background: #fff; }
   main { padding: 0; }
   #print-area {
-    box-shadow: none !important; border: 1px solid #ccc; color: #111; background: #fff;
+    /* On-screen confirmation card is a digital summary; .print-sheet below
+       is what actually goes on paper, so the card doesn't print at all. */
+    display: none !important;
   }
   .confirm-code { background: #fff !important; color: #111 !important; border: 1px solid #ccc; }
+  .print-sheet { display: block; color: #111; }
 }
+
+/* ---- Printable requisition slip (request.html, print/PDF only) — modeled
+   on the paper "ใบเบิกวัสดุ/อุปกรณ์" slip this form replaces: header info,
+   a numbered item table, and 4 signature boxes for the physical sign-off
+   chain (requester -> supervisor -> issuer -> receiver). Plain borders and
+   black-on-white throughout since this is meant to be printed/scanned, not
+   viewed on screen. ------------------------------------------------------ */
+.print-sheet-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  border-bottom: 2px solid #111; padding-bottom: var(--s3); margin-bottom: var(--s4);
+}
+.print-sheet-title { font-size: var(--t-sec); font-weight: 700; }
+.print-sheet-code { font-family: var(--mono); font-size: var(--t-meta); }
+.print-sheet-meta {
+  width: 100%; border-collapse: collapse; margin-bottom: var(--s4); font-size: var(--t-meta);
+}
+.print-sheet-meta th, .print-sheet-meta td {
+  border: 1px solid #999; padding: var(--s2) var(--s3); text-align: left; vertical-align: top;
+}
+.print-sheet-meta th { width: 18%; background: #f2f2f2; font-weight: 600; white-space: nowrap; }
+.print-sheet-meta td { width: 32%; }
+.print-sheet-items {
+  width: 100%; border-collapse: collapse; margin-bottom: var(--s5); font-size: var(--t-meta);
+}
+.print-sheet-items th, .print-sheet-items td {
+  border: 1px solid #999; padding: var(--s2) var(--s3); text-align: left;
+}
+.print-sheet-items th { background: #f2f2f2; font-weight: 600; }
+.print-sheet-items .print-col-no { width: 8%; text-align: center; }
+.print-sheet-items .print-col-qty { width: 12%; text-align: right; }
+.print-sheet-items .print-col-unit { width: 14%; }
+.print-sheet-notes {
+  font-size: var(--t-meta); margin: calc(-1 * var(--s4)) 0 var(--s5);
+  padding-bottom: var(--s3); border-bottom: 1px solid #999;
+}
+.print-sheet-notes strong { display: block; margin-bottom: var(--s1); }
+.print-sheet-signatures {
+  display: grid; grid-template-columns: 1fr 1fr; gap: var(--s5) var(--s6); margin-top: var(--s5);
+}
+.print-sig-box { text-align: center; }
+.print-sig-line { height: 48px; border-bottom: 1px solid #111; }
+.print-sig-label { margin-top: var(--s2); font-size: var(--t-meta); }
 
 /* ---- Landing page (index.html) — a hub screen, same component library as
    the rest of the app (header, eyebrow, chip) plus one new pattern: a grid

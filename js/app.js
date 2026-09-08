@@ -782,6 +782,7 @@ function renderRequestsList() {
     (r.request_code || '').toLowerCase().includes(q) ||
     (r.department || '').toLowerCase().includes(q) ||
     (r.notes || '').toLowerCase().includes(q) ||
+    (r.work_area || '').toLowerCase().includes(q) ||
     (r.skus?.name || '').toLowerCase().includes(q) ||
     (r.skus?.sku_code || '').toLowerCase().includes(q) ||
     (r.created_at || '').slice(0, 10).includes(q) ||
@@ -816,6 +817,7 @@ function renderRequestsList() {
         </div>
         <span class="chip ${statusChipClass(r.status)}">${statusLabel(r.status)}</span>
       </div>
+      ${r.work_area ? `<div class="card-meta" style="margin-top:var(--s2)">${icon('mapPin', 12)} ${escapeHtml(r.work_area)}</div>` : ''}
       ${r.notes ? `<div class="card-meta" style="margin-top:var(--s2)">${escapeHtml(r.notes)}</div>` : ''}
       <div class="card-row" style="margin-top:var(--s3)">
         <span class="card-meta mono">${escapeHtml(r.request_code)} · ${whenLine}</span>
@@ -959,6 +961,7 @@ function filterRequestsReport(allRows, q) {
     (r.requester_name || '').toLowerCase().includes(q) ||
     (r.department || '').toLowerCase().includes(q) ||
     (r.notes || '').toLowerCase().includes(q) ||
+    (r.work_area || '').toLowerCase().includes(q) ||
     (r.request_code || '').toLowerCase().includes(q) ||
     (r.skus?.name || '').toLowerCase().includes(q) ||
     (r.skus?.sku_code || '').toLowerCase().includes(q) ||
@@ -1014,9 +1017,10 @@ function renderReportTable(kind) {
     );
   } else if (kind === 'requests') {
     body.innerHTML = tableHtml(
-      [t('colWhen'), t('colRequest'), t('colRequester'), t('colDepartment'), t('colItem'), t('colComment'), t('colStatus')],
+      [t('colWhen'), t('colRequest'), t('colRequester'), t('colDepartment'), t('colWorkArea'), t('colItem'), t('colComment'), t('colStatus')],
       rows.map((r) => [
         fmtDateTime(r.created_at), r.request_code, r.requester_name, r.department || t('noDepartment'),
+        r.work_area || '—',
         r.skus ? `${r.skus.sku_code} — ${r.skus.name}${r.qty_requested ? ` (${fmtQty(r.qty_requested)} ${r.skus.base_uom || ''})` : ''}` : t('generalRequest'),
         r.notes || '—',
         `<span class="chip ${statusChipClass(r.status)}">${statusLabel(r.status)}</span>`,

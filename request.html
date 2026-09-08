@@ -42,6 +42,10 @@
           <label for="req-department" data-i18n="fieldDepartment">Department</label>
           <input type="text" id="req-department" required>
         </div>
+        <div class="field">
+          <label for="req-workarea" data-i18n="fieldWorkArea">Area / job that needs materials</label>
+          <input type="text" id="req-workarea" data-i18n-placeholder="fieldWorkAreaPh" placeholder="e.g. Building A, 3rd floor restroom" required>
+        </div>
 
         <div class="field">
           <label data-i18n="fieldSelectItems">Items (optional)</label>
@@ -74,6 +78,7 @@
         <div class="confirm-rows">
           <div class="confirm-row"><span data-i18n="fieldRequesterName2">Your name</span><strong id="confirm-name"></strong></div>
           <div class="confirm-row"><span data-i18n="fieldDepartment">Department</span><strong id="confirm-department"></strong></div>
+          <div class="confirm-row"><span data-i18n="fieldWorkArea">Area / job that needs materials</span><strong id="confirm-workarea"></strong></div>
           <div class="confirm-row"><span data-i18n="requestSubmittedAt">Submitted</span><strong id="confirm-when"></strong></div>
         </div>
         <div id="confirm-items-block" hidden>
@@ -81,6 +86,50 @@
           <div id="confirm-items" class="req-item-list"></div>
         </div>
         <div class="confirm-comment" id="confirm-comment" hidden></div>
+      </div>
+
+      <!-- Print/PDF-only layout, modeled on the paper requisition slip this
+           form replaces: same header info as above plus a numbered item
+           table and 4 signature boxes for the physical sign-off chain
+           (requester / supervisor / issuer / receiver). Hidden on screen —
+           see .print-sheet in app.css — the on-screen card above is the
+           digital summary; this is what actually prints. -->
+      <div class="print-sheet" id="print-sheet">
+        <div class="print-sheet-head">
+          <div class="print-sheet-title" data-i18n="printFormTitle">Materials / Equipment Requisition</div>
+          <div class="print-sheet-code" id="print-code"></div>
+        </div>
+        <table class="print-sheet-meta">
+          <tr>
+            <th data-i18n="printFieldDate">Date</th><td id="print-date"></td>
+            <th data-i18n="fieldDepartment">Department</th><td id="print-department"></td>
+          </tr>
+          <tr>
+            <th data-i18n="fieldRequesterName2">Your name</th><td id="print-name"></td>
+            <th data-i18n="fieldWorkArea">Area / job that needs materials</th><td id="print-workarea"></td>
+          </tr>
+        </table>
+        <table class="print-sheet-items">
+          <thead>
+            <tr>
+              <th class="print-col-no" data-i18n="printColNo">No.</th>
+              <th data-i18n="colItem">Item</th>
+              <th class="print-col-qty" data-i18n="printColQty">Qty</th>
+              <th class="print-col-unit" data-i18n="fieldUnit">Unit</th>
+            </tr>
+          </thead>
+          <tbody id="print-items"></tbody>
+        </table>
+        <div class="print-sheet-notes" id="print-notes" hidden>
+          <strong data-i18n="fieldComment">Additional comments</strong>
+          <span id="print-notes-text"></span>
+        </div>
+        <div class="print-sheet-signatures">
+          <div class="print-sig-box"><div class="print-sig-line"></div><div class="print-sig-label" data-i18n="sigRequester">Requester</div></div>
+          <div class="print-sig-box"><div class="print-sig-line"></div><div class="print-sig-label" data-i18n="sigApprover">Approver (supervisor)</div></div>
+          <div class="print-sig-box"><div class="print-sig-line"></div><div class="print-sig-label" data-i18n="sigIssuer">Materials issued by</div></div>
+          <div class="print-sig-box"><div class="print-sig-line"></div><div class="print-sig-label" data-i18n="sigReceiver">Materials received by</div></div>
+        </div>
       </div>
 
       <div class="no-print" style="margin-top:var(--s4)">

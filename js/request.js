@@ -34,12 +34,13 @@ function showFormView() {
   document.getElementById('view-confirm').hidden = true;
 }
 
-function showConfirmView({ requestCode, createdAt, requesterName, department, items: submittedItems, comment }) {
+function showConfirmView({ requestCode, createdAt, requesterName, department, workArea, items: submittedItems, comment }) {
   document.getElementById('view-form').hidden = true;
   document.getElementById('view-confirm').hidden = false;
   document.getElementById('confirm-code').textContent = requestCode;
   document.getElementById('confirm-name').textContent = requesterName;
   document.getElementById('confirm-department').textContent = department || t('noDepartment');
+  document.getElementById('confirm-workarea').textContent = workArea;
   document.getElementById('confirm-when').textContent = fmtDateTime(createdAt);
 
   const itemsBlock = document.getElementById('confirm-items-block');
@@ -67,6 +68,53 @@ function showConfirmView({ requestCode, createdAt, requesterName, department, it
   } else {
     commentEl.hidden = true;
     commentEl.textContent = '';
+  }
+
+  renderPrintSheet({ requestCode, createdAt, requesterName, department, workArea, items: submittedItems, comment });
+}
+
+// The printable/PDF form (see .print-sheet in request.html) — a numbered
+// item table plus 4 blank signature boxes, modeled on the paper requisition
+// slip this replaces. Populated once at confirm time; nothing here is
+// interactive, it only ever needs to exist for window.print().
+function renderPrintSheet({ requestCode, createdAt, requesterName, department, workArea, items: submittedItems, comment }) {
+  document.getElementById('print-code').textContent = requestCode;
+  document.getElementById('print-date').textContent = fmtDateTime(createdAt);
+  document.getElementById('print-department').textContent = department || t('noDepartment');
+  document.getElementById('print-name').textContent = requesterName;
+  document.getElementById('print-workarea').textContent = workArea;
+
+  const rows = submittedItems.length
+    ? submittedItems.map((it, i) => `
+        <tr>
+          <td class="print-col-no">${i + 1}</td>
+          <td>${escapeHtml(it.name)} <span class="mono">(${escapeHtml(it.sku_code)})</span></td>
+          <td class="print-col-qty">${escapeHtml(fmtQty(it.qty))}</td>
+          <td class="print-col-unit">${escapeHtml(it.base_uom || '')}</td>
+        </tr>
+      `).join('')
+    // Comment-only request: no item list, so the comment (always present in
+    // this case — the database requires one or the other) stands in as the
+    // single line item on the printed table.
+    : `
+        <tr>
+          <td class="print-col-no">1</td>
+          <td>${escapeHtml(comment || '—')}</td>
+          <td class="print-col-qty"></td>
+          <td class="print-col-unit"></td>
+        </tr>
+      `;
+  document.getElementById('print-items').innerHTML = rows;
+
+  // The comment already IS the line item when there's no item list (above);
+  // only surface it as a separate notes line when there's also a real item
+  // list, so it isn't shown twice and isn't lost either way.
+  const notesEl = document.getElementById('print-notes');
+  if (submittedItems.length && comment) {
+    notesEl.hidden = false;
+    document.getElementById('print-notes-text').textContent = comment;
+  } else {
+    notesEl.hidden = true;
   }
 }
 
@@ -186,6 +234,7 @@ document.getElementById('form-public-request').addEventListener('submit', async 
 
   const requesterName = document.getElementById('req-name').value.trim();
   const department = document.getElementById('req-department').value.trim();
+  const workArea = document.getElementById('req-workarea').value.trim();
 
   const btn = document.getElementById('req-submit');
   btn.disabled = true;
@@ -194,6 +243,7 @@ document.getElementById('form-public-request').addEventListener('submit', async 
       requesterName,
       department,
       comment: comment || null,
+      workArea,
       items: items.map((it) => ({ skuId: it.id, qty: Number(it.qty) })),
     });
     const first = Array.isArray(rows) ? rows[0] : rows; // fake-client / real client both hand back the RPC's rows
@@ -202,6 +252,7 @@ document.getElementById('form-public-request').addEventListener('submit', async 
       createdAt: first.created_at,
       requesterName,
       department,
+      workArea,
       items,
       comment,
     });

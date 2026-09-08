@@ -85,18 +85,30 @@ in the database enforces this split for real, not just in the UI — see
   reads as one more screen in the system, not a different site: an icon
   tile per door, each badged with whether it needs a login before you click
   it.
-- **Public request form** (`request.html`) — no login. Name and department,
-  then search the same item catalog Stock/Receive use and add any number of
-  items to a list (each gets its own quantity), a free-text comment, or
-  both — the form only insists on at least one of items-or-comment.
-  Submitting hands back one request number (`REQ-YYMMDD-NNN`, assigned
-  atomically by the database, same pattern as lot and SKU codes) shared by
-  every item in the list. The confirmation screen has a **Print / Save as
-  PDF** button (the browser's own print dialog, saved as a PDF from there)
-  so a requester can keep a copy without needing to be logged in to
-  anything. These land in the same `requests` table and the same admin
-  Requests tab as the item-based requests staff create internally — one
-  pipeline. Under the hood a multi-item submission is stored as one row per
+- **Public request form** (`request.html`) — no login. Name, department, and
+  a required **area/job** line (what the materials are actually for, e.g.
+  "Building A, 3rd floor restroom") — modeled on the paper requisition slip
+  this replaces, which always has that line filled in. Then search the same
+  item catalog Stock/Receive use and add any number of items to a list (each
+  gets its own quantity), a free-text comment, or both — the form only
+  insists on at least one of items-or-comment (the area/job line is always
+  required, separately). Submitting hands back one request number
+  (`REQ-YYMMDD-NNN`, assigned atomically by the database, same pattern as lot
+  and SKU codes) shared by every item in the list. The confirmation screen
+  has a **Print / Save as PDF** button; what actually prints is a dedicated,
+  print-only layout (invisible on screen — the on-screen confirmation stays a
+  simple digital summary) built to match that same paper slip: a header with
+  the request number, a table of date/department/name/area-job, a numbered
+  item table (comment-only requests print the comment as the single line
+  item; a comment alongside a real item list prints as a separate notes line
+  so it isn't lost), and 4 blank signature boxes — **ผู้ขอเบิก** (requester),
+  **ผู้ตรวจสอบ (หัวหน้า)** (supervisor), **ผู้จ่ายวัสดุ/อุปกรณ์** (issued
+  by), **ผู้รับวัสดุ/อุปกรณ์** (received by) — for the physical sign-off
+  chain once it's printed. A requester can keep a copy without needing to be
+  logged in to anything. These land in the same `requests` table and the
+  same admin Requests tab/Reports as the item-based requests staff create
+  internally — one pipeline, and the area/job line and a search on it show
+  there too. Under the hood a multi-item submission is stored as one row per
   item (all sharing the same `request_code`), so the admin Requests
   list/Reports show one card per item rather than grouping a multi-item
   request under a single card — a deliberate tradeoff to avoid touching the

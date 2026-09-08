@@ -209,11 +209,12 @@ const DB = {
   // system the same way lot/SKU codes are (see schema.sql). Returns an
   // array: one row per item, all sharing one request_code (or a single
   // row for a comment-only submission).
-  async createPublicRequest({ requesterName, department, comment, items }) {
+  async createPublicRequest({ requesterName, department, comment, workArea, items }) {
     const { data, error } = await supabaseClient.rpc('create_public_request', {
       p_requester_name: requesterName,
       p_department: department || null,
       p_comment: comment || null,
+      p_work_area: workArea,
       p_items: items && items.length ? items.map((i) => ({ sku_id: i.skuId, qty: i.qty })) : null,
     });
     if (error) throw error;

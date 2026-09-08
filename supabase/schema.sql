@@ -148,6 +148,14 @@ alter table requests add column if not exists picked_up_by text;
 -- one requests table, one admin view, told apart by whether sku_id is set.
 alter table requests add column if not exists department text;
 
+-- The area/job the materials are actually for (e.g. "Building A, 3rd floor
+-- restroom" or "รั้วด้านหลังอาคาร") — modeled on the paper requisition slip
+-- this form replaces, which always has a "ระบุงานซ่อม/โซน" line filled in.
+-- The public form requires it (see create_public_request below); the
+-- column itself stays nullable so rows created before this field existed
+-- aren't left with a constraint they can't satisfy.
+alter table requests add column if not exists work_area text;
+
 do $$
 begin
   if not exists (
@@ -253,7 +261,17 @@ group by s.id;
 create or replace view low_stock as
 select * from stock_by_sku where is_low order by on_hand asc;
 
-create or replace view stock_by_lot as
+-- Dropped and recreated (not create-or-replace): this view gained `source`
+-- and `note` partway through its column list when the Return feature was
+-- added, and Postgres only allows CREATE OR REPLACE VIEW to append new
+-- columns at the very end, never insert or reorder them — a plain
+-- create-or-replace here fails with 42P16 ("cannot change name of view
+-- column ... to ...") on any database where the view already exists from
+-- an earlier schema version. Nothing else in this schema selects from it
+-- by column position (app code and every other view/function reference it
+-- by name), so dropping it first is safe.
+drop view if exists stock_by_lot;
+create view stock_by_lot as
 select
   l.id as lot_id, l.lot_code, l.balance, l.qty_received, l.uom,
   l.receive_date, l.supplier_ref, l.source, l.received_by, l.note,
@@ -504,19 +522,24 @@ $$;
 -- different function, and this avoids leaving old overloads behind.
 -- v2.0: (name, department, comment)
 -- v2.1: (name, department, comment, sku_id, qty) — one item + a comment
--- v2.2 (current): (name, department, comment, items jsonb) — a *list* of
--- items (each {"sku_id": "...", "qty": n}) plus a comment. One row is
--- inserted per item, all sharing one request_code — the requests table
--- already allowed sku_id/qty_requested to be null (the comment-only case),
--- so no table change was needed, only this function. Each item still moves
--- through pending -> preparing -> ready -> fulfilled independently, which
--- matches how a warehouse actually picks a multi-item order: one line at a
--- time, not all-or-nothing.
+-- v2.2: (name, department, comment, items jsonb) — a *list* of items (each
+-- {"sku_id": "...", "qty": n}) plus a comment. One row is inserted per item,
+-- all sharing one request_code — the requests table already allowed
+-- sku_id/qty_requested to be null (the comment-only case), so no table
+-- change was needed, only this function. Each item still moves through
+-- pending -> preparing -> ready -> fulfilled independently, which matches
+-- how a warehouse actually picks a multi-item order: one line at a time,
+-- not all-or-nothing.
+-- v2.3 (current): (name, department, comment, work_area, items jsonb) —
+-- adds the required "what area/job is this for" line the printed slip
+-- always carries (see the work_area column above and request.html's print
+-- layout), copied onto every row the same way the comment already is.
 drop function if exists create_public_request(text, text, text);
 drop function if exists create_public_request(text, text, text, uuid, numeric);
+drop function if exists create_public_request(text, text, text, jsonb);
 
 create or replace function create_public_request(
-  p_requester_name text, p_department text, p_comment text,
+  p_requester_name text, p_department text, p_comment text, p_work_area text,
   p_items jsonb default null
 ) returns setof requests
 language plpgsql
@@ -533,9 +556,15 @@ declare
   v_sku_ok boolean;
   v_item_count int;
   v_notes text;
+  v_work_area text;
 begin
   if coalesce(trim(p_requester_name), '') = '' then
     raise exception 'Requester name is required';
+  end if;
+
+  v_work_area := nullif(trim(p_work_area), '');
+  if v_work_area is null then
+    raise exception 'Please describe the area or job this is for';
   end if;
 
   v_item_count := coalesce(jsonb_array_length(p_items), 0);
@@ -573,19 +602,19 @@ begin
 
   if v_item_count = 0 then
     -- comment-only request: a single row, same as before v2.2
-    insert into requests (request_code, requester_name, department, notes)
-    values (v_code, trim(p_requester_name), nullif(trim(p_department), ''), v_notes)
+    insert into requests (request_code, requester_name, department, notes, work_area)
+    values (v_code, trim(p_requester_name), nullif(trim(p_department), ''), v_notes, v_work_area)
     returning * into v_row;
     return next v_row;
   else
-    -- one row per item, all sharing v_code; the comment (if any) is copied
-    -- onto every row so it's visible regardless of which item card staff
-    -- happen to be looking at.
+    -- one row per item, all sharing v_code; the comment and work_area (if
+    -- any) are copied onto every row so they're visible regardless of which
+    -- item card staff happen to be looking at.
     for v_item in select * from jsonb_array_elements(p_items) loop
       v_sku_id := (v_item->>'sku_id')::uuid;
       v_qty := (v_item->>'qty')::numeric;
-      insert into requests (request_code, requester_name, department, sku_id, qty_requested, notes)
-      values (v_code, trim(p_requester_name), nullif(trim(p_department), ''), v_sku_id, v_qty, v_notes)
+      insert into requests (request_code, requester_name, department, sku_id, qty_requested, notes, work_area)
+      values (v_code, trim(p_requester_name), nullif(trim(p_department), ''), v_sku_id, v_qty, v_notes, v_work_area)
       returning * into v_row;
       return next v_row;
     end loop;
@@ -603,13 +632,13 @@ revoke execute on function receive_stock(uuid, numeric, text, text, text) from p
 revoke execute on function return_stock(uuid, numeric, text, text, text) from public;
 revoke execute on function issue_stock(uuid, uuid, numeric, text) from public;
 revoke execute on function create_sku(text, text, text, text, numeric, numeric) from public;
-revoke execute on function create_public_request(text, text, text, jsonb) from public;
+revoke execute on function create_public_request(text, text, text, text, jsonb) from public;
 
 grant execute on function receive_stock(uuid, numeric, text, text, text) to authenticated;
 grant execute on function return_stock(uuid, numeric, text, text, text) to authenticated;
 grant execute on function issue_stock(uuid, uuid, numeric, text) to authenticated;
 grant execute on function create_sku(text, text, text, text, numeric, numeric) to authenticated;
-grant execute on function create_public_request(text, text, text, jsonb) to anon, authenticated;
+grant execute on function create_public_request(text, text, text, text, jsonb) to anon, authenticated;
 
 -- ----------------------------------------------------------------------------
 -- 8. Row Level Security
