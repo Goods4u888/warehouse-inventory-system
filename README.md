@@ -1,10 +1,14 @@
 # Warehouse Inventory — v2
 
 QR-code receiving and requisition for a construction-materials warehouse.
-Built to match `functional_spec` (SKU/lot/QR receiving, scan-to-issue with
+Built to match `functional_spec` (SKU/QR receiving, scan-to-issue with
 discrepancy handling, thresholds, reporting) and the companion
-[Warehouse Stock Flow](workflow diagram) mechanism: two entry paths writing
-into one stock ledger.
+[Warehouse Stock Flow](workflow diagram) mechanism: two entry paths — Receive/
+Return and Scan (Issue / Receive more) — writing into one running total per
+item. (Through 2026-09-07 that shared ledger was a sum across per-delivery
+lot balances, each with its own QR sticker; as of 2026-09-08 it's a single
+`qty_on_hand` per item under one permanent sticker — see "One QR per item,
+not per batch" below.)
 
 This is a plain HTML/CSS/JS app talking directly to Supabase (Postgres +
 auto-generated API). No build step — open `index.html` and it runs.
