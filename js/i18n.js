@@ -175,6 +175,7 @@ const I18N = {
     errorRequestFailed: 'Could not submit your request',
 
     // Printed/PDF requisition slip (request.html print-only layout)
+    orgName: 'Office of Property and Sports Management, Thammasat University',
     printFormTitle: 'Materials / Equipment Requisition',
     printFieldDate: 'Date',
     printColNo: 'No.',
@@ -364,6 +365,7 @@ const I18N = {
     backToHome: 'กลับหน้าแรก',
     errorRequestFailed: 'ไม่สามารถส่งคำขอได้',
 
+    orgName: 'สำนักงานบริหารทรัพย์สินและกีฬา มหาวิทยาลัยธรรมศาสตร์',
     printFormTitle: 'ใบเบิกวัสดุ/อุปกรณ์',
     printFieldDate: 'วันที่',
     printColNo: 'ลำดับ',

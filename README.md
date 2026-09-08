@@ -97,8 +97,11 @@ in the database enforces this split for real, not just in the UI — see
   and SKU codes) shared by every item in the list. The confirmation screen
   has a **Print / Save as PDF** button; what actually prints is a dedicated,
   print-only layout (invisible on screen — the on-screen confirmation stays a
-  simple digital summary) built to match that same paper slip: a header with
-  the request number, a table of date/department/name/area-job, a numbered
+  simple digital summary) built to match that same paper slip: a letterhead
+  (the office's logo — `img/logo-property-office.png` — and its name,
+  "สำนักงานบริหารทรัพย์สินและกีฬา มหาวิทยาลัยธรรมศาสตร์", top-left of the
+  page), a header with the request number, a table of
+  date/department/name/area-job, a numbered
   item table (comment-only requests print the comment as the single line
   item; a comment alongside a real item list prints as a separate notes line
   so it isn't lost), and 4 blank signature boxes — **ผู้ขอเบิก** (requester),
