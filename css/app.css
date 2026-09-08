@@ -333,6 +333,19 @@ td.num, th.num { text-align: right; font-family: var(--mono); }
 .toast.error { background: var(--discrepancy); }
 .toast.success { background: var(--ok); }
 
+/* ---- Version badge ------------------------------------------------------------------
+   A small, non-interactive corner label so it's obvious at a glance whether a
+   device is actually running the latest deploy or a stale cached copy (see
+   the ?v= query string on every local <script>/<link> tag, which this same
+   number should always match). Fixed positioning keeps it clear of the
+   bottom tabbar/content regardless of scroll or which page it's on; hidden
+   on print so it never shows up on the printed requisition slip. */
+.app-version {
+  position: fixed; right: 8px; bottom: 3px; z-index: 40;
+  font-family: var(--mono); font-size: 10px; color: var(--ink-3);
+  opacity: .55; pointer-events: none; user-select: none;
+}
+
 /* ---- Loading skeleton ---------------------------------------------------------------- */
 .skeleton {
   background: linear-gradient(90deg, var(--paper-2) 25%, var(--line) 37%, var(--paper-2) 63%);

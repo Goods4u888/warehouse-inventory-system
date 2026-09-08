@@ -233,3 +233,16 @@ supabase/schema.sql            tables, views, RPCs, RLS policies, 5-item seed
 supabase/seed_mockup_100.sql   optional ~100-item Thai demo catalog (see Setup step 2)
 scripts/gen_mockup_seed.py     regenerates seed_mockup_100.sql from an editable Python list
 ```
+
+## Deploy version / cache-busting
+
+Every local `<script src="js/...">` and `<link href="css/...">` tag in
+index.html/admin.html/request.html carries a `?v=YYYYMMDDx` query string
+(e.g. `?v=20260908b`), and the same string shows as a small grey label in the
+bottom-right corner of every page (`.app-version`, hidden on print). Bump
+**both** — every `?v=` tag and the `.app-version` text — together whenever
+you push a JS/CSS change; otherwise a phone/browser that already cached the
+old files has no signal to fetch the new ones, and Vercel redeploying doesn't
+by itself clear an existing cached copy on someone's device. The visible
+badge is there so you can glance at the corner of the screen and confirm
+which build is actually loaded, instead of guessing.
