@@ -47,9 +47,30 @@ const QR = {
 
   async startScanner(videoEl, canvasEl, onDetect, onError) {
     try {
-      this._stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' },
-      });
+      // Ask for a higher-resolution stream with continuous autofocus — plain
+      // `{ facingMode: 'environment' }` lets the browser pick whatever it
+      // wants, which on a lot of Android/Chrome phones turns out to be a
+      // low-res feed that's locked to far-field focus after the first frame.
+      // That's fine for a video call but leaves a QR sticker held a few
+      // inches from the lens permanently blurry, so the preview shows but
+      // nothing ever decodes. `advanced` constraints a device doesn't
+      // support can make the whole getUserMedia call reject outright
+      // (rather than just being ignored), so fall back to the plain
+      // constraint set if the richer one fails.
+      try {
+        this._stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            advanced: [{ focusMode: 'continuous' }],
+          },
+        });
+      } catch (_) {
+        this._stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment' },
+        });
+      }
       videoEl.srcObject = this._stream;
       await videoEl.play();
 
@@ -62,8 +83,12 @@ const QR = {
             ctx.drawImage(videoEl, 0, 0, canvasEl.width, canvasEl.height);
             const imageData = ctx.getImageData(0, 0, canvasEl.width, canvasEl.height);
             // eslint-disable-next-line no-undef
+            // 'attemptBoth' also tries the color-inverted image — costs a bit
+            // of CPU per frame but catches glare/lighting conditions that
+            // flip local contrast on a glossy printed sticker, which
+            // 'dontInvert' would miss.
             const code = jsQR(imageData.data, imageData.width, imageData.height, {
-              inversionAttempts: 'dontInvert',
+              inversionAttempts: 'attemptBoth',
             });
             if (code && code.data) {
               onDetect(code.data.trim());
@@ -72,6 +97,10 @@ const QR = {
           }
           this._raf = requestAnimationFrame(tick);
         } catch (err) {
+          // A frame-processing error (e.g. a transient canvas/security
+          // error) used to silently kill the whole requestAnimationFrame
+          // loop — camera preview stays live but scanning quietly stops
+          // forever. Report it instead of dying silently.
           onError && onError(err);
         }
       };
