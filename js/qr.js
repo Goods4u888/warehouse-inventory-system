@@ -45,6 +45,11 @@ const QR = {
   // -- Camera scanning --------------------------------------------------------
   _stream: null,
   _raf: null,
+  // Bumped by stopScanner() to invalidate any in-flight tick()/detect() call
+  // from a loop that's already been stopped — needed now that detection can
+  // genuinely be async (BarcodeDetector), so a stop can land mid-await
+  // instead of always between synchronous frame processing like before.
+  _scanId: 0,
 
   // How long to let the camera try before telling the user it can't read the
   // code — long enough that normal aiming/focusing isn't mistaken for
@@ -53,6 +58,7 @@ const QR = {
   NOT_RECOGNIZED_MS: 8000,
 
   async startScanner(videoEl, canvasEl, onDetect, onError, onNotRecognized) {
+    const scanId = ++this._scanId;
     try {
       // Ask for a higher-resolution stream with continuous autofocus — plain
       // `{ facingMode: 'environment' }` lets the browser pick whatever it
@@ -78,29 +84,65 @@ const QR = {
           video: { facingMode: 'environment' },
         });
       }
+      if (scanId !== this._scanId) return; // stopped while awaiting camera permission
       videoEl.srcObject = this._stream;
       await videoEl.play();
+      if (scanId !== this._scanId) return;
 
-      const ctx = canvasEl.getContext('2d', { willReadFrequently: true });
+      // Prefer the browser's native BarcodeDetector when it exists and
+      // actually claims QR support. It runs through the OS's own vision
+      // pipeline — on Android Chrome that's the same Play-Services ML
+      // decoder behind Google Lens and the native camera's code scanner —
+      // instead of jsQR's pure-JS frame-diff algorithm, so it copes far
+      // better with the blur/glare/off-angle real phones produce even with
+      // the getUserMedia tuning above. This is exactly the gap reported in
+      // practice: the native camera reads a sticker fine, jsQR alone
+      // doesn't. jsQR stays as the fallback for browsers that don't ship
+      // it (desktop Safari/Firefox, some older/desktop Chrome builds).
+      let detector = null;
+      if ('BarcodeDetector' in window) {
+        try {
+          const formats = await window.BarcodeDetector.getSupportedFormats();
+          if (formats.includes('qr_code')) {
+            detector = new window.BarcodeDetector({ formats: ['qr_code'] });
+          }
+        } catch (_) {
+          detector = null;
+        }
+      }
+      if (scanId !== this._scanId) return;
+
+      const ctx = detector ? null : canvasEl.getContext('2d', { willReadFrequently: true });
       const startedAt = Date.now();
       let notRecognizedFired = false;
-      const tick = () => {
+      const tick = async () => {
+        if (scanId !== this._scanId) return; // superseded by a stop/restart
         try {
           if (videoEl.readyState === videoEl.HAVE_ENOUGH_DATA) {
-            canvasEl.width = videoEl.videoWidth;
-            canvasEl.height = videoEl.videoHeight;
-            ctx.drawImage(videoEl, 0, 0, canvasEl.width, canvasEl.height);
-            const imageData = ctx.getImageData(0, 0, canvasEl.width, canvasEl.height);
-            // eslint-disable-next-line no-undef
-            // 'attemptBoth' also tries the color-inverted image — costs a bit
-            // of CPU per frame but catches glare/lighting conditions that
-            // flip local contrast on a glossy printed sticker, which
-            // 'dontInvert' would miss.
-            const code = jsQR(imageData.data, imageData.width, imageData.height, {
-              inversionAttempts: 'attemptBoth',
-            });
-            if (code && code.data) {
-              onDetect(code.data.trim());
+            let value = null;
+            if (detector) {
+              // detect() reads the live <video> frame directly — no manual
+              // canvas draw/getImageData needed on this path.
+              const codes = await detector.detect(videoEl);
+              if (scanId !== this._scanId) return; // stopped mid-detect
+              if (codes && codes.length) value = codes[0].rawValue;
+            } else {
+              canvasEl.width = videoEl.videoWidth;
+              canvasEl.height = videoEl.videoHeight;
+              ctx.drawImage(videoEl, 0, 0, canvasEl.width, canvasEl.height);
+              const imageData = ctx.getImageData(0, 0, canvasEl.width, canvasEl.height);
+              // eslint-disable-next-line no-undef
+              // 'attemptBoth' also tries the color-inverted image — costs a
+              // bit of CPU per frame but catches glare/lighting conditions
+              // that flip local contrast on a glossy printed sticker, which
+              // 'dontInvert' would miss.
+              const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                inversionAttempts: 'attemptBoth',
+              });
+              if (code && code.data) value = code.data;
+            }
+            if (value && value.trim()) {
+              onDetect(value.trim());
               return; // caller decides whether to restart
             }
           }
@@ -128,6 +170,7 @@ const QR = {
   },
 
   stopScanner(videoEl) {
+    this._scanId++; // invalidate any in-flight tick()/detect() from this loop
     if (this._raf) cancelAnimationFrame(this._raf);
     this._raf = null;
     if (this._stream) {

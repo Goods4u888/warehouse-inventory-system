@@ -253,7 +253,7 @@ scripts/gen_mockup_seed.py     regenerates seed_mockup_100.sql from an editable 
 
 Every local `<script src="js/...">` and `<link href="css/...">` tag in
 index.html/admin.html/request.html carries a `?v=YYYYMMDDx` query string
-(e.g. `?v=20260908c`), and the same string shows as a small grey label in the
+(e.g. `?v=20260908d`), and the same string shows as a small grey label in the
 bottom-right corner of every page (`.app-version`, hidden on print). Bump
 **both** — every `?v=` tag and the `.app-version` text — together whenever
 you push a JS/CSS change; otherwise a phone/browser that already cached the
