@@ -50,32 +50,35 @@ const QR = {
       this._stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment' },
       });
+      videoEl.srcObject = this._stream;
+      await videoEl.play();
+
+      const ctx = canvasEl.getContext('2d', { willReadFrequently: true });
+      const tick = () => {
+        try {
+          if (videoEl.readyState === videoEl.HAVE_ENOUGH_DATA) {
+            canvasEl.width = videoEl.videoWidth;
+            canvasEl.height = videoEl.videoHeight;
+            ctx.drawImage(videoEl, 0, 0, canvasEl.width, canvasEl.height);
+            const imageData = ctx.getImageData(0, 0, canvasEl.width, canvasEl.height);
+            // eslint-disable-next-line no-undef
+            const code = jsQR(imageData.data, imageData.width, imageData.height, {
+              inversionAttempts: 'dontInvert',
+            });
+            if (code && code.data) {
+              onDetect(code.data.trim());
+              return; // caller decides whether to restart
+            }
+          }
+          this._raf = requestAnimationFrame(tick);
+        } catch (err) {
+          onError && onError(err);
+        }
+      };
+      this._raf = requestAnimationFrame(tick);
     } catch (err) {
       onError && onError(err);
-      return;
     }
-    videoEl.srcObject = this._stream;
-    await videoEl.play();
-
-    const ctx = canvasEl.getContext('2d', { willReadFrequently: true });
-    const tick = () => {
-      if (videoEl.readyState === videoEl.HAVE_ENOUGH_DATA) {
-        canvasEl.width = videoEl.videoWidth;
-        canvasEl.height = videoEl.videoHeight;
-        ctx.drawImage(videoEl, 0, 0, canvasEl.width, canvasEl.height);
-        const imageData = ctx.getImageData(0, 0, canvasEl.width, canvasEl.height);
-        // eslint-disable-next-line no-undef
-        const code = jsQR(imageData.data, imageData.width, imageData.height, {
-          inversionAttempts: 'dontInvert',
-        });
-        if (code && code.data) {
-          onDetect(code.data.trim());
-          return; // caller decides whether to restart
-        }
-      }
-      this._raf = requestAnimationFrame(tick);
-    };
-    this._raf = requestAnimationFrame(tick);
   },
 
   stopScanner(videoEl) {
