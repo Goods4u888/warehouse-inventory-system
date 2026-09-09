@@ -8,8 +8,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 
-<link rel="stylesheet" href="css/tokens.css?v=20260909a">
-<link rel="stylesheet" href="css/app.css?v=20260909a">
+<link rel="stylesheet" href="css/tokens.css?v=20260909b">
+<link rel="stylesheet" href="css/app.css?v=20260909b">
 </head>
 <body>
 
@@ -50,6 +50,15 @@
 
     <!-- ===================== STOCK (home) ===================== -->
     <section class="view" id="view-stock">
+      <button class="scan-shortcut" id="btn-scan-shortcut" type="button">
+        <span class="scan-shortcut-icon" data-icon="qr" data-icon-size="22"></span>
+        <span class="scan-shortcut-text">
+          <span class="scan-shortcut-title" data-i18n="scanShortcutTitle">Scan or type SKU code</span>
+          <span class="scan-shortcut-desc" data-i18n="scanShortcutDesc">Find any item in the catalog instantly</span>
+        </span>
+        <span class="scan-shortcut-arrow" data-icon="arrowRight"></span>
+      </button>
+
       <div class="card-row" style="margin-bottom:var(--s5)">
         <div>
           <div class="stat-label" data-i18n="onHandLabel">On hand · active SKUs</div>
@@ -262,18 +271,18 @@
      mid-populated at the same time. -->
 <div class="admin-print-sheet print-sticker-grid" id="admin-print-sheet"></div>
 
-<div class="app-version no-print">v20260909a</div>
+<div class="app-version no-print">v20260909b</div>
 
 <!-- Third-party: Supabase client, QR generation, QR scanning -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.js"></script>
 
-<script src="js/config.js?v=20260909a"></script>
-<script src="js/db.js?v=20260909a"></script>
-<script src="js/qr.js?v=20260909a"></script>
-<script src="js/i18n.js?v=20260909a"></script>
-<script src="js/icons.js?v=20260909a"></script>
-<script src="js/app.js?v=20260909a"></script>
+<script src="js/config.js?v=20260909b"></script>
+<script src="js/db.js?v=20260909b"></script>
+<script src="js/qr.js?v=20260909b"></script>
+<script src="js/i18n.js?v=20260909b"></script>
+<script src="js/icons.js?v=20260909b"></script>
+<script src="js/app.js?v=20260909b"></script>
 </body>
 </html>

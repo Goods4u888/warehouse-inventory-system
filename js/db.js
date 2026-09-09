@@ -249,6 +249,20 @@ const DB = {
     return data;
   },
 
+  // Recent activity for one item (Stock -> tap a card -> item detail sheet).
+  // Same movement_history view as the Reports tab, filtered/limited server-side
+  // instead of pulling the whole ledger and filtering client-side.
+  async movementHistoryForSku(skuCode, limit = 5) {
+    const { data, error } = await supabaseClient
+      .from('movement_history')
+      .select('*')
+      .eq('sku_code', skuCode)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+    return data;
+  },
+
   async discrepancyReport() {
     const { data, error } = await supabaseClient.from('discrepancy_report').select('*');
     if (error) throw error;

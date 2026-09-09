@@ -159,7 +159,7 @@ function renderStock() {
     return;
   }
   list.innerHTML = rows.map((r) => `
-    <div class="card">
+    <div class="card card-clickable" data-sku-id="${r.sku_id}" role="button" tabindex="0">
       <div class="card-row">
         <div>
           <div class="card-title">${escapeHtml(r.name)}</div>
@@ -177,6 +177,107 @@ function renderStock() {
       </div>
     </div>
   `).join('');
+}
+
+// Tapping a Stock card opens its item detail sheet — event delegation since
+// the list is fully re-rendered on every search/facet/refresh.
+document.getElementById('stock-list').addEventListener('click', (e) => {
+  const card = e.target.closest('[data-sku-id]');
+  if (!card) return;
+  const row = stockRows.find((r) => r.sku_id === card.dataset.skuId);
+  if (row) openItemDetailSheet(row);
+});
+document.getElementById('stock-list').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const card = e.target.closest('[data-sku-id]');
+  if (!card) return;
+  e.preventDefault();
+  const row = stockRows.find((r) => r.sku_id === card.dataset.skuId);
+  if (row) openItemDetailSheet(row);
+});
+
+document.getElementById('btn-scan-shortcut').addEventListener('click', () => showView('issue'));
+
+// ---- Item detail (Stock -> tap a card) ---------------------------------------
+// A read-only summary of one item — on-hand/threshold/status plus its most
+// recent movements (js/db.js: movementHistoryForSku) — with shortcuts into
+// the same Issue/Receive/Print actions available elsewhere, so a card tap
+// covers "what is this, how much do we have, what happened to it lately" in
+// one place instead of needing Reports/Scan/Manage items separately.
+function openItemDetailSheet(row) {
+  Sheet.open(t('itemDetailTitle'), `
+    <div class="card-row" style="align-items:flex-start">
+      <div>
+        <div class="card-title" style="font-size:var(--t-sec)">${escapeHtml(row.name)}</div>
+        <div class="card-meta mono">${escapeHtml(row.sku_code)}</div>
+      </div>
+      <span class="chip chip-cat-${catClass(row.category)}">${icon(catIcon(row.category), 12)}${escapeHtml(row.category)}</span>
+    </div>
+
+    <div class="card-row" style="margin-top:var(--s5)">
+      <div>
+        <div class="stat-label">${t('onHandLabel')}</div>
+        <div class="stat-figure">${fmtQty(row.on_hand)}<span style="font-size:var(--t-micro);color:var(--ink-3)"> ${escapeHtml(row.base_uom)}</span></div>
+      </div>
+      ${row.is_low
+        ? `<span class="chip chip-low"><span class="dot"></span>${t('chipBelowThreshold', fmtQty(row.min_threshold))}</span>`
+        : `<span class="chip chip-ok"><span class="dot"></span>${t('chipOk')}</span>`}
+    </div>
+    <div class="field-hint">${t('itemDetailThresholdHint', fmtQty(row.min_threshold), escapeHtml(row.base_uom))}</div>
+
+    <div class="section-head"><h2>${t('itemDetailRecentActivity')}</h2></div>
+    <div id="idet-movements">${skeletonCards(2)}</div>
+
+    <div class="idet-actions">
+      <button class="btn btn-primary" id="idet-btn-issue" data-icon="check"><span>${t('scanActionIssue')}</span></button>
+      <button class="btn btn-outline" id="idet-btn-receive" data-icon="package"><span>${t('scanActionReceive')}</span></button>
+    </div>
+    <button class="btn btn-outline btn-block" style="margin-top:var(--s2)" id="idet-btn-print">${icon('printer', 16)}<span>${t('btnPrintSticker')}</span></button>
+  `);
+  applyStaticIcons();
+
+  document.getElementById('idet-btn-issue').addEventListener('click', () => {
+    Sheet.close();
+    showView('issue');
+    onItemScanned(row.sku_code, 'issue');
+  });
+  document.getElementById('idet-btn-receive').addEventListener('click', () => {
+    Sheet.close();
+    showView('issue');
+    onItemScanned(row.sku_code, 'receive');
+  });
+  document.getElementById('idet-btn-print').addEventListener('click', () => {
+    printSkuSticker({ sku_code: row.sku_code, name: row.name });
+  });
+
+  loadItemDetailMovements(row.sku_code);
+}
+
+async function loadItemDetailMovements(skuCode) {
+  const box = document.getElementById('idet-movements');
+  if (!box) return;
+  try {
+    const rows = await DB.movementHistoryForSku(skuCode, 5);
+    if (!box.isConnected) return; // sheet closed while this was in flight
+    if (!rows.length) {
+      box.innerHTML = `<div class="empty"><p>${t('itemDetailNoActivity')}</p></div>`;
+      return;
+    }
+    const typeLabel = { receive: t('mvReceive'), issue: t('mvIssue'), return: t('mvReturn') };
+    const sign = { receive: '+', issue: '−', return: '+' };
+    const qtyClass = { receive: 'pos', issue: 'neg', return: 'pos' };
+    box.innerHTML = `<div class="idet-move-list">${rows.map((m) => `
+      <div class="idet-move-row">
+        <div class="idet-move-row-text">
+          <span class="card-title" style="font-size:var(--t-meta)">${escapeHtml(typeLabel[m.type] || m.type)}</span>
+          <span class="card-meta">${fmtDate(m.created_at)}${m.performed_by ? ` · ${escapeHtml(m.performed_by)}` : ''}</span>
+        </div>
+        <span class="idet-move-qty ${qtyClass[m.type] || ''}">${sign[m.type] || ''}${fmtQty(m.qty)} ${escapeHtml(m.uom)}</span>
+      </div>
+    `).join('')}</div>`;
+  } catch (err) {
+    if (box.isConnected) box.innerHTML = '';
+  }
 }
 
 function skeletonCards(n) {
@@ -734,7 +835,7 @@ document.getElementById('btn-lookup-lot').addEventListener('click', () => {
   if (code) onItemScanned(code);
 });
 
-async function onItemScanned(code) {
+async function onItemScanned(code, preferredAction = null) {
   QR.stopScanner(document.getElementById('scan-video'));
   document.getElementById('scan-status').textContent = t('scanLookingUp', code);
   try {
@@ -746,7 +847,7 @@ async function onItemScanned(code) {
     }
     const openRequests = await DB.listRequests({});
     const forThisSku = openRequests.filter((r) => r.sku_id === sku.sku_id && r.status !== 'fulfilled' && r.status !== 'cancelled');
-    renderScannedItem(sku, forThisSku);
+    renderScannedItem(sku, forThisSku, preferredAction);
   } catch (err) {
     toast(err.message || 'Lookup failed', 'error');
     resetScanView();
@@ -758,11 +859,11 @@ async function onItemScanned(code) {
 // screen that lets scanning the same code do either. Defaults to the Issue
 // tab when there's an open request to fulfill, otherwise to Receive (there's
 // nothing to issue against, so that's the useful action).
-function renderScannedItem(sku, openRequests) {
+function renderScannedItem(sku, openRequests, preferredAction = null) {
   document.getElementById('scan-step-camera').hidden = true;
   const box = document.getElementById('scan-step-issue');
   box.hidden = false;
-  const defaultAction = openRequests.length ? 'issue' : 'receive';
+  const defaultAction = preferredAction || (openRequests.length ? 'issue' : 'receive');
   box.innerHTML = `
     <div class="card">
       <div class="eyebrow">${t('itemFound')}</div>

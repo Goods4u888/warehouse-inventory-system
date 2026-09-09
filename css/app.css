@@ -167,6 +167,45 @@ main {
 
 .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
 
+/* ---- Scan/search shortcut (Stock view) ------------------------------------------ */
+/* A single tappable card, first thing under the header on Stock — jumps
+   straight to Scan (js/app.js) so finding one item among a large catalog
+   doesn't require scrolling/filtering the list below it. */
+.scan-shortcut {
+  display: flex; align-items: center; gap: var(--s3); width: 100%;
+  text-align: left; border: none; cursor: pointer; font-family: inherit;
+  background: var(--card); border-radius: var(--r-media); box-shadow: var(--lift-1);
+  padding: var(--s4); margin-bottom: var(--s5);
+  transition: box-shadow .2s var(--ease), transform .2s var(--ease);
+}
+.scan-shortcut:hover, .scan-shortcut:focus-visible { box-shadow: var(--lift-2); outline: none; }
+.scan-shortcut-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 44px; height: 44px; border-radius: var(--r-control); flex: none;
+  background: var(--accent-wash); color: var(--accent-ink);
+}
+.scan-shortcut-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.scan-shortcut-title { font-weight: 600; font-size: var(--t-card); }
+.scan-shortcut-desc { color: var(--ink-2); font-size: var(--t-micro); }
+.scan-shortcut-arrow { flex: none; color: var(--ink-3); display: inline-flex; }
+
+/* ---- Stock card -> item detail (Stock view) --------------------------------------- */
+.card-clickable { cursor: pointer; transition: box-shadow .2s var(--ease); }
+.card-clickable:hover, .card-clickable:focus-visible { box-shadow: var(--lift-2); outline: none; }
+
+/* ---- Item detail sheet (Stock -> tap a card) -------------------------------------- */
+.idet-move-list { display: flex; flex-direction: column; gap: var(--s2); }
+.idet-move-row {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--s3);
+  padding: var(--s3); background: var(--paper-2); border-radius: var(--r-control);
+}
+.idet-move-row-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.idet-move-qty { font-family: var(--mono); font-weight: 600; flex: none; }
+.idet-move-qty.pos { color: var(--ok); }
+.idet-move-qty.neg { color: var(--discrepancy); }
+.idet-actions { display: flex; gap: var(--s2); margin-top: var(--s5); }
+.idet-actions .btn { flex: 1; }
+
 /* ---- Search --------------------------------------------------------------------- */
 .search-wrap { position: relative; margin-bottom: var(--s3); }
 .search-wrap > svg.icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--ink-3); pointer-events: none; }
