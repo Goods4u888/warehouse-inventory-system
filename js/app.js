@@ -13,6 +13,24 @@ const CATS = {
 function catClass(category) {
   return CATS[category] || 'other';
 }
+
+// category is stored (and matched against skus.category / the "add
+// category" flow) as the English name seeded in schema.sql/the mockup
+// seeds — this only changes how it's *displayed* in Thai, same pattern as
+// every other t()-driven label. A category a staff member typed by hand
+// (via the "+" add-category button) has no entry here and just falls back
+// to whatever they typed, which is normal since that's already Thai text.
+const CATEGORY_LABELS_TH = {
+  Cement: 'ปูนซีเมนต์', Steel: 'เหล็ก', Aggregate: 'หินและทราย',
+  'Pipe & Fittings': 'ท่อและอุปกรณ์ประปา', Hardware: 'ฮาร์ดแวร์',
+  Electrical: 'ไฟฟ้า', 'Sanitary Ware': 'สุขภัณฑ์', Paint: 'สีและอุปกรณ์ทาสี',
+  Lumber: 'ไม้และวัสดุแผ่น', 'Cleaning Supplies': 'อุปกรณ์ทำความสะอาด',
+  Flooring: 'พื้นและวัสดุปูพื้น', Ceiling: 'ฝ้าเพดาน', Furniture: 'เฟอร์นิเจอร์',
+  'Curtains & Blinds': 'ผ้าม่านและมู่ลี่',
+};
+function catLabel(category) {
+  return I18n.current === 'th' ? (CATEGORY_LABELS_TH[category] || category) : category;
+}
 function fmtQty(n) {
   const num = Number(n);
   return Number.isInteger(num) ? String(num) : num.toFixed(2).replace(/\.?0+$/, '');
@@ -138,7 +156,7 @@ function renderStockFacets() {
   const cats = ['all', ...new Set(stockRows.map((r) => r.category))];
   const el = document.getElementById('stock-facets');
   el.innerHTML = cats.map((c) => `
-    <button class="facet" data-cat="${escapeHtml(c)}" aria-pressed="${c === stockFacet}">${icon(c === 'all' ? 'list' : catIcon(c), 14)}<span>${c === 'all' ? t('facetAll') : escapeHtml(c)}</span></button>
+    <button class="facet" data-cat="${escapeHtml(c)}" aria-pressed="${c === stockFacet}">${icon(c === 'all' ? 'list' : catIcon(c), 14)}<span>${c === 'all' ? t('facetAll') : escapeHtml(catLabel(c))}</span></button>
   `).join('');
   el.querySelectorAll('.facet').forEach((btn) => {
     btn.addEventListener('click', () => { stockFacet = btn.dataset.cat; renderStockFacets(); renderStock(); });
@@ -171,7 +189,7 @@ function renderStock() {
         </div>
       </div>
       <div class="card-row" style="margin-top:var(--s3)">
-        <span class="chip chip-cat-${catClass(r.category)}">${icon(catIcon(r.category), 12)}${escapeHtml(r.category)}</span>
+        <span class="chip chip-cat-${catClass(r.category)}">${icon(catIcon(r.category), 12)}${escapeHtml(catLabel(r.category))}</span>
         ${r.is_low
           ? `<span class="chip chip-low"><span class="dot"></span>${t('chipBelowThreshold', fmtQty(r.min_threshold))}</span>`
           : `<span class="chip chip-ok"><span class="dot"></span>${t('chipOk')}</span>`}
@@ -212,7 +230,7 @@ function openItemDetailSheet(row) {
         <div class="card-title" style="font-size:var(--t-sec)">${escapeHtml(row.name)}</div>
         <div class="card-meta mono">${escapeHtml(row.sku_code)}</div>
       </div>
-      <span class="chip chip-cat-${catClass(row.category)}">${icon(catIcon(row.category), 12)}${escapeHtml(row.category)}</span>
+      <span class="chip chip-cat-${catClass(row.category)}">${icon(catIcon(row.category), 12)}${escapeHtml(catLabel(row.category))}</span>
     </div>
 
     <div class="card-row" style="margin-top:var(--s5)">
@@ -328,7 +346,7 @@ function renderCategoryOptions(selected = '') {
   const current = selected || sel.value;
   sel.innerHTML = `
     <option value="" disabled ${current ? '' : 'selected'}>${t('selectCategoryPlaceholder')}</option>
-    ${miCategories.map((c) => `<option value="${escapeHtml(c.name)}" ${c.name === current ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
+    ${miCategories.map((c) => `<option value="${escapeHtml(c.name)}" ${c.name === current ? 'selected' : ''}>${escapeHtml(catLabel(c.name))}</option>`).join('')}
   `;
 }
 
@@ -577,7 +595,7 @@ function miRowHtml(s) {
         </div>
       </div>
       <div class="card-row" style="margin-top:var(--s3)">
-        <span class="chip chip-cat-${catClass(s.category)}">${icon(catIcon(s.category), 12)}${escapeHtml(s.category)}</span>
+        <span class="chip chip-cat-${catClass(s.category)}">${icon(catIcon(s.category), 12)}${escapeHtml(catLabel(s.category))}</span>
       </div>
       <div class="card-row" style="margin-top:var(--s3)">
         <button class="btn btn-outline btn-sm" data-mi-edit="${s.id}">${icon('pencil', 14)}<span>${t('btnEdit')}</span></button>
@@ -871,7 +889,7 @@ function renderScannedItem(sku, openRequests, preferredAction = null) {
       <div class="card-title">${escapeHtml(sku.name)}</div>
       <div class="card-meta mono">${escapeHtml(sku.sku_code)}</div>
       <div class="card-row" style="margin-top:var(--s3)">
-        <span class="chip chip-cat-${catClass(sku.category)}">${icon(catIcon(sku.category), 12)}${escapeHtml(sku.category)}</span>
+        <span class="chip chip-cat-${catClass(sku.category)}">${icon(catIcon(sku.category), 12)}${escapeHtml(catLabel(sku.category))}</span>
         <span class="stat-figure" style="font-size:var(--t-card)">${t('unitOnHand', fmtQty(sku.on_hand), escapeHtml(sku.base_uom))}</span>
       </div>
     </div>
@@ -1258,7 +1276,7 @@ function renderReportTable(kind) {
   if (kind === 'stock') {
     body.innerHTML = tableHtml(
       [t('colSku'), t('colName'), t('colCategory'), t('colOnHand'), t('colThreshold'), t('colStatus')],
-      rows.map((r) => [r.sku_code, r.name, r.category,
+      rows.map((r) => [r.sku_code, r.name, catLabel(r.category),
         `<span class="num">${fmtQty(r.on_hand)} ${r.base_uom}</span>`,
         `<span class="num">${fmtQty(r.min_threshold)}</span>`,
         r.is_low ? `<span class="chip chip-low">${t('rowLow')}</span>` : `<span class="chip chip-ok">${t('chipOk')}</span>`]),
@@ -1279,7 +1297,7 @@ function renderReportTable(kind) {
   } else if (kind === 'lowstock') {
     body.innerHTML = tableHtml(
       [t('colSku'), t('colName'), t('colCategory'), t('colOnHand'), t('colThreshold')],
-      rows.map((r) => [r.sku_code, r.name, r.category, `<span class="num">${fmtQty(r.on_hand)} ${r.base_uom}</span>`, `<span class="num">${fmtQty(r.min_threshold)}</span>`]),
+      rows.map((r) => [r.sku_code, r.name, catLabel(r.category), `<span class="num">${fmtQty(r.on_hand)} ${r.base_uom}</span>`, `<span class="num">${fmtQty(r.min_threshold)}</span>`]),
     );
   } else if (kind === 'requests') {
     body.innerHTML = tableHtml(
