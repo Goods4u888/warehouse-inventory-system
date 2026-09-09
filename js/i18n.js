@@ -49,6 +49,7 @@ const I18N = {
     btnGenerating: 'Recording…',
     stickerReady: 'Sticker ready to print',
     btnPrintSticker: 'Print sticker',
+    fieldCopies: 'Copies',
     receiveConfirmLine: (qty, uom, total) => `+${qty} ${uom} recorded. On hand now: ${total}.`,
     toastStockReceived: (qty, uom, code) => `+${qty} ${uom} received for ${code}`,
 
@@ -256,6 +257,7 @@ const I18N = {
     btnGenerating: 'กำลังบันทึก…',
     stickerReady: 'สติกเกอร์พร้อมพิมพ์',
     btnPrintSticker: 'พิมพ์สติกเกอร์',
+    fieldCopies: 'จำนวนที่พิมพ์',
     receiveConfirmLine: (qty, uom, total) => `บันทึกรับเข้า +${qty} ${uom} แล้ว คงเหลือตอนนี้: ${total}`,
     toastStockReceived: (qty, uom, code) => `รับเข้า +${qty} ${uom} สำหรับ ${code}`,
 

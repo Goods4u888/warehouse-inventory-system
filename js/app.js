@@ -251,7 +251,10 @@ function openItemDetailSheet(row) {
       <button class="btn btn-primary" id="idet-btn-issue" data-icon="check"><span>${t('scanActionIssue')}</span></button>
       <button class="btn btn-outline" id="idet-btn-receive" data-icon="package"><span>${t('scanActionReceive')}</span></button>
     </div>
-    <button class="btn btn-outline btn-block" style="margin-top:var(--s2)" id="idet-btn-print">${icon('printer', 16)}<span>${t('btnPrintSticker')}</span></button>
+    <div class="field-with-btn" style="margin-top:var(--s2)">
+      <input type="number" class="qty-mini-input" id="idet-print-qty" min="1" max="${STICKERS_PER_SHEET_MAX}" value="${STICKERS_PER_SHEET}" aria-label="${t('fieldCopies')}">
+      <button class="btn btn-outline" id="idet-btn-print">${icon('printer', 16)}<span>${t('btnPrintSticker')}</span></button>
+    </div>
   `);
   applyStaticIcons();
 
@@ -266,7 +269,7 @@ function openItemDetailSheet(row) {
     onItemScanned(row.sku_code, 'receive');
   });
   document.getElementById('idet-btn-print').addEventListener('click', () => {
-    printSkuSticker({ sku_code: row.sku_code, name: row.name });
+    printSkuSticker({ sku_code: row.sku_code, name: row.name }, readStickerCount('idet-print-qty'));
   });
 
   loadItemDetailMovements(row.sku_code);
@@ -554,7 +557,7 @@ function renderManageItemsLists() {
   document.querySelectorAll('[data-mi-print]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const sku = miAllSkus.find((s) => s.id === btn.dataset.miPrint);
-      if (sku) printSkuSticker(sku);
+      if (sku) printSkuSticker(sku, readStickerCount(`mi-print-qty-${sku.id}`));
     });
   });
   document.querySelectorAll('[data-mi-select]').forEach((cb) => {
@@ -597,8 +600,9 @@ function miRowHtml(s) {
       <div class="card-row" style="margin-top:var(--s3)">
         <span class="chip chip-cat-${catClass(s.category)}">${icon(catIcon(s.category), 12)}${escapeHtml(catLabel(s.category))}</span>
       </div>
-      <div class="card-row" style="margin-top:var(--s3)">
+      <div class="card-row" style="margin-top:var(--s3);flex-wrap:wrap">
         <button class="btn btn-outline btn-sm" data-mi-edit="${s.id}">${icon('pencil', 14)}<span>${t('btnEdit')}</span></button>
+        <input type="number" class="qty-mini-input" id="mi-print-qty-${s.id}" min="1" max="${STICKERS_PER_SHEET_MAX}" value="${STICKERS_PER_SHEET}" aria-label="${t('fieldCopies')}">
         <button class="btn btn-outline btn-sm" data-mi-print="${s.id}">${icon('printer', 14)}<span>${t('btnPrintSticker')}</span></button>
         ${s.is_active
           ? `<button class="btn btn-ghost btn-sm" data-mi-toggle="${s.id}" data-to-active="false">${icon('xCircle', 14)}<span>${t('btnDeactivate')}</span></button>`
@@ -618,9 +622,10 @@ function miRowHtml(s) {
 // call this) so their copies' QR container ids never collide if two of
 // these somehow render back to back.
 const STICKERS_PER_SHEET = 20;
-function printStickerSheet(sku, idPrefix) {
+const STICKERS_PER_SHEET_MAX = 200;
+function printStickerSheet(sku, idPrefix, count = STICKERS_PER_SHEET) {
   const box = document.getElementById('admin-print-sheet');
-  const copies = Array.from({ length: STICKERS_PER_SHEET }, (_, i) => i);
+  const copies = Array.from({ length: count }, (_, i) => i);
   box.innerHTML = copies
     .map((i) => QR.stickerHtml({ skuCode: sku.sku_code, skuName: sku.name, idPrefix: `${idPrefix}${i}-` }))
     .join('');
@@ -628,10 +633,20 @@ function printStickerSheet(sku, idPrefix) {
   window.print();
 }
 
+// Reads the copies-to-print field next to a print button (see
+// .qty-mini-input in app.css) — falls back to STICKERS_PER_SHEET for
+// anything blank/non-numeric/zero, and caps at STICKERS_PER_SHEET_MAX so a
+// mistyped value can't queue up an enormous print job.
+function readStickerCount(inputId) {
+  const el = document.getElementById(inputId);
+  const n = el ? parseInt(el.value, 10) : NaN;
+  return Number.isFinite(n) && n > 0 ? Math.min(n, STICKERS_PER_SHEET_MAX) : STICKERS_PER_SHEET;
+}
+
 // Print an item's permanent sticker on demand from Manage Items — not tied
 // to a receive/return event.
-function printSkuSticker(sku) {
-  printStickerSheet(sku, 'mi-sticker-qr-');
+function printSkuSticker(sku, count) {
+  printStickerSheet(sku, 'mi-sticker-qr-', count);
 }
 
 // Bulk version: every checked Manage Items row, one sticker each, laid out
@@ -747,10 +762,13 @@ function renderReceiveResult(sku, qty, uom) {
       <div class="eyebrow">${t('stickerReady')}</div>
       <p class="field-hint">${t('receiveConfirmLine', fmtQty(qty), escapeHtml(uom), fmtQty(sku.qty_on_hand))}</p>
       ${QR.stickerHtml({ skuCode: sku.sku_code, skuName: sku.name })}
-      <button class="btn btn-outline btn-block" style="margin-top:var(--s4)" id="btn-print-sticker">${icon('printer', 16)}<span>${t('btnPrintSticker')}</span></button>
+      <div class="field-with-btn" style="margin-top:var(--s4)">
+        <input type="number" class="qty-mini-input" id="rc-print-qty" min="1" max="${STICKERS_PER_SHEET_MAX}" value="${STICKERS_PER_SHEET}" aria-label="${t('fieldCopies')}">
+        <button class="btn btn-outline" id="btn-print-sticker">${icon('printer', 16)}<span>${t('btnPrintSticker')}</span></button>
+      </div>
     </div>`;
   QR.renderInto(document.getElementById(`sticker-qr-${sku.sku_code}`), sku.sku_code, 120);
-  document.getElementById('btn-print-sticker').addEventListener('click', () => printStickerSheet(sku, 'rc-sticker-qr-'));
+  document.getElementById('btn-print-sticker').addEventListener('click', () => printStickerSheet(sku, 'rc-sticker-qr-', readStickerCount('rc-print-qty')));
 }
 
 // ---- Receive / Return mode toggle -------------------------------------------
@@ -835,10 +853,13 @@ function renderReturnResult(sku, qty, uom) {
       <div class="eyebrow">${t('stickerReady')}</div>
       <p class="field-hint">${t('returnConfirmLine', fmtQty(qty), escapeHtml(uom), fmtQty(sku.qty_on_hand))}</p>
       ${QR.stickerHtml({ skuCode: sku.sku_code, skuName: sku.name })}
-      <button class="btn btn-outline btn-block" style="margin-top:var(--s4)" id="btn-print-return-sticker">${icon('printer', 16)}<span>${t('btnPrintSticker')}</span></button>
+      <div class="field-with-btn" style="margin-top:var(--s4)">
+        <input type="number" class="qty-mini-input" id="rt-print-qty" min="1" max="${STICKERS_PER_SHEET_MAX}" value="${STICKERS_PER_SHEET}" aria-label="${t('fieldCopies')}">
+        <button class="btn btn-outline" id="btn-print-return-sticker">${icon('printer', 16)}<span>${t('btnPrintSticker')}</span></button>
+      </div>
     </div>`;
   QR.renderInto(document.getElementById(`sticker-qr-${sku.sku_code}`), sku.sku_code, 120);
-  document.getElementById('btn-print-return-sticker').addEventListener('click', () => printStickerSheet(sku, 'rt-sticker-qr-'));
+  document.getElementById('btn-print-return-sticker').addEventListener('click', () => printStickerSheet(sku, 'rt-sticker-qr-', readStickerCount('rt-print-qty')));
 }
 
 // ============================================================================

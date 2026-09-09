@@ -314,6 +314,19 @@ main {
 
 .field-with-btn { display: flex; gap: var(--s2); align-items: stretch; }
 .field-with-btn select { flex: 1; min-width: 0; }
+.field-with-btn .btn { flex: 1; }
+
+/* Copies-to-print field next to every "Print sticker" button (Manage Items
+   row, Item detail, Receive/Return confirmation) — sized to sit inline with
+   a btn-sm/btn without changing that button's own width. */
+.qty-mini-input {
+  width: 56px; flex: none; border: 1px solid transparent; border-radius: var(--r-control);
+  padding: 8px; min-height: 36px; font-size: var(--t-micro); font-family: var(--mono);
+  background: var(--paper-2); color: var(--ink); text-align: center;
+}
+.qty-mini-input:focus {
+  outline: none; background: var(--paper); border-color: var(--line-strong); box-shadow: 0 0 0 3px var(--signal-wash);
+}
 .btn-icon-add {
   display: inline-flex; align-items: center; justify-content: center;
   flex: none; width: 44px;
@@ -451,6 +464,16 @@ td.num, th.num { text-align: right; font-family: var(--mono); }
   .header, .tabbar, .btn, .toast, .no-print, .login-screen, .scrim { display: none !important; }
   body { background: #fff; }
   main { padding: 0; }
+  /* admin.html's 5 tabs are plain on-screen content — none of them are
+     meant to print as-is. Without this, whichever tab happens to be active
+     (e.g. the full Stock list) prints ahead of the actual print-only
+     content below (.admin-print-sheet), on top of it, as its own extra
+     pages. Named by id rather than their shared ".view" class because
+     request.html reuses that same class for #view-confirm, which DOES
+     need to print (it's what makes .print-sheet visible below). */
+  #view-stock, #view-receive, #view-issue, #view-requests, #view-reports {
+    display: none !important;
+  }
   #print-area {
     /* On-screen confirmation card is a digital summary; .print-sheet below
        is what actually goes on paper, so the card doesn't print at all. */
