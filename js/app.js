@@ -189,6 +189,10 @@ function skeletonCards(n) {
 let miAllSkus = [];
 let miEditingId = null;
 let miCategories = [];
+// IDs checked via the Manage Items checkboxes, for the bulk "print selected"
+// A4 sticker sheet. Reset each time the sheet is (re)opened — selection
+// isn't meant to persist across separate visits to Manage Items.
+let miSelectedIds = new Set();
 
 document.getElementById('btn-manage-items').addEventListener('click', openManageItemsSheet);
 
@@ -200,6 +204,7 @@ async function refreshSkuCaches() {
 }
 
 function openManageItemsSheet() {
+  miSelectedIds = new Set();
   Sheet.open(t('manageItemsTitle'), manageItemsSheetHtml());
   wireManageItemsForm();
   loadManageItemsCategories();
@@ -283,6 +288,14 @@ function manageItemsSheetHtml() {
       </div>
     </form>
 
+    <div class="mi-bulk-bar">
+      <label class="mi-check mi-select-all">
+        <input type="checkbox" id="mi-select-all">
+        <span>${t('selectAll')}</span>
+      </label>
+      <button type="button" class="btn btn-primary btn-sm" id="mi-print-selected" disabled>${icon('printer', 14)}<span id="mi-print-selected-label">${t('btnPrintSelected')}</span></button>
+    </div>
+
     <div class="section-head"><h2>${t('activeItems')}</h2></div>
     <div id="mi-active-list" class="card-list"></div>
     <div class="section-head"><h2>${t('inactiveItems')}</h2></div>
@@ -318,6 +331,20 @@ function wireManageItemsForm() {
   newInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); onAddCategory(newInput, newRow); }
   });
+
+  // Bulk-print toolbar lives outside the two list containers that
+  // renderManageItemsLists() rewrites, so it's wired once here rather than
+  // on every render (unlike the per-row checkboxes, which are re-bound each
+  // time since renderManageItemsLists() recreates those elements).
+  document.getElementById('mi-select-all').addEventListener('change', (e) => {
+    if (e.target.checked) {
+      miAllSkus.forEach((s) => miSelectedIds.add(s.id));
+    } else {
+      miSelectedIds.clear();
+    }
+    renderManageItemsLists();
+  });
+  document.getElementById('mi-print-selected').addEventListener('click', printSelectedStickers);
 }
 
 async function onAddCategory(newInput, newRow) {
@@ -386,6 +413,11 @@ async function loadManageItemsList() {
 }
 
 function renderManageItemsLists() {
+  // Drop any selected id that no longer exists (e.g. after a reload) so the
+  // toolbar's count/checkbox state never drifts from what's actually there.
+  const liveIds = new Set(miAllSkus.map((s) => s.id));
+  miSelectedIds.forEach((id) => { if (!liveIds.has(id)) miSelectedIds.delete(id); });
+
   const active = miAllSkus.filter((s) => s.is_active);
   const inactive = miAllSkus.filter((s) => !s.is_active);
   const activeEl = document.getElementById('mi-active-list');
@@ -405,12 +437,38 @@ function renderManageItemsLists() {
       if (sku) printSkuSticker(sku);
     });
   });
+  document.querySelectorAll('[data-mi-select]').forEach((cb) => {
+    cb.addEventListener('change', () => {
+      if (cb.checked) miSelectedIds.add(cb.dataset.miSelect);
+      else miSelectedIds.delete(cb.dataset.miSelect);
+      updateBulkPrintToolbar();
+    });
+  });
+  updateBulkPrintToolbar();
+}
+
+// Keeps the "select all" checkbox and "Print selected" button in sync with
+// miSelectedIds — called after every list render and every checkbox change,
+// since the count/enabled-state can't just be computed once.
+function updateBulkPrintToolbar() {
+  const selectAll = document.getElementById('mi-select-all');
+  const printBtn = document.getElementById('mi-print-selected');
+  const label = document.getElementById('mi-print-selected-label');
+  if (!selectAll || !printBtn || !label) return;
+  const count = miSelectedIds.size;
+  selectAll.checked = miAllSkus.length > 0 && count === miAllSkus.length;
+  printBtn.disabled = count === 0;
+  label.textContent = count > 0 ? `${t('btnPrintSelected')} · ${t('selectedCount', count)}` : t('btnPrintSelected');
 }
 
 function miRowHtml(s) {
+  const checked = miSelectedIds.has(s.id) ? 'checked' : '';
   return `
     <div class="card">
-      <div class="card-row">
+      <div class="card-row mi-row-head">
+        <label class="mi-check">
+          <input type="checkbox" data-mi-select="${s.id}" ${checked} aria-label="${t('selectAll')}">
+        </label>
         <div>
           <div class="card-title">${escapeHtml(s.name)}</div>
           <div class="card-meta mono">${escapeHtml(s.sku_code)} · ${escapeHtml(s.base_uom)}</div>
@@ -437,8 +495,26 @@ function miRowHtml(s) {
 // styling which doesn't apply here.
 function printSkuSticker(sku) {
   const box = document.getElementById('admin-print-sticker');
-  box.innerHTML = QR.stickerHtml({ skuCode: sku.sku_code, skuName: sku.name });
-  QR.renderInto(document.getElementById(`sticker-qr-${sku.sku_code}`), sku.sku_code, 120);
+  box.innerHTML = QR.stickerHtml({ skuCode: sku.sku_code, skuName: sku.name, idPrefix: 'mi-sticker-qr-' });
+  QR.renderInto(document.getElementById(`mi-sticker-qr-${sku.sku_code}`), sku.sku_code, 120);
+  window.print();
+}
+
+// Bulk version of printSkuSticker(): every checked Manage Items row, laid
+// out as a grid of individually-cuttable stickers on plain A4 paper (no
+// specific label-sheet brand/alignment to match — see .print-sticker-grid
+// in app.css). Renders into its own print-only container (parallel to
+// #admin-print-sticker) so a single-item reprint elsewhere never collides
+// with a bulk sheet mid-print.
+function printSelectedStickers() {
+  const items = miAllSkus.filter((s) => miSelectedIds.has(s.id));
+  if (!items.length) {
+    toast(t('toastNoItemsSelected'), 'error');
+    return;
+  }
+  const box = document.getElementById('admin-print-sheet');
+  box.innerHTML = items.map((s) => QR.stickerHtml({ skuCode: s.sku_code, skuName: s.name, idPrefix: 'mi-bulk-qr-' })).join('');
+  items.forEach((s) => QR.renderInto(document.getElementById(`mi-bulk-qr-${s.sku_code}`), s.sku_code, 120));
   window.print();
 }
 

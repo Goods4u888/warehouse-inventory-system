@@ -30,11 +30,19 @@ const QR = {
    * event — so `eventLabel`/`eventDate` are optional and the date line is
    * omitted entirely when they're not supplied (e.g. printing from Manage
    * Items rather than right after receiving/returning stock).
+   *
+   * `idPrefix` namespaces the QR container's id (default 'sticker-qr-',
+   * matching every existing caller). Callers that can be live in the DOM at
+   * the same time as another sticker for the same sku_code — e.g. Manage
+   * Items' print flows, which can be opened while a receive/return
+   * confirmation sticker is still sitting in #receive-result/#return-result
+   * on the Receive tab — should pass their own prefix so the two don't
+   * collide on the same id.
    */
-  stickerHtml({ skuCode, skuName, eventLabel, eventDate }) {
+  stickerHtml({ skuCode, skuName, eventLabel, eventDate, idPrefix = 'sticker-qr-' }) {
     return `
       <div class="sticker">
-        <div class="sticker-qr" id="sticker-qr-${skuCode}"></div>
+        <div class="sticker-qr" id="${idPrefix}${skuCode}"></div>
         <div class="sticker-text">
           <div class="sticker-sku">${skuCode} · ${skuName}</div>
           ${eventLabel && eventDate ? `<div class="sticker-date">${eventLabel} ${eventDate}</div>` : ''}

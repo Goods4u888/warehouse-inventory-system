@@ -138,8 +138,11 @@ in the database enforces this split for real, not just in the UI — see
   opens full CRUD on the item master:
   add a SKU, edit any field, deactivate (soft-delete — history is kept) or
   reactivate one, and print/reprint that item's permanent QR sticker on
-  demand. Deactivated items drop out of Receive and New Request pickers but
-  stay visible, separately listed, in Manage items.
+  demand — one at a time, or check several items (a "select all" toggle
+  is there too) and print them together as one sheet of individually
+  cuttable stickers on plain A4 paper. Deactivated items drop out of
+  Receive and New Request pickers but stay visible, separately listed, in
+  Manage items.
 - **One QR per item, not per batch.** Every SKU has a single permanent QR
   sticker (encoding just its `sku_code` — never a quantity, since a printed
   sticker can't be updated later), printed once and stuck on the shelf/bin
@@ -253,7 +256,7 @@ scripts/gen_mockup_seed.py     regenerates seed_mockup_100.sql from an editable 
 
 Every local `<script src="js/...">` and `<link href="css/...">` tag in
 index.html/admin.html/request.html carries a `?v=YYYYMMDDx` query string
-(e.g. `?v=20260908d`), and the same string shows as a small grey label in the
+(e.g. `?v=20260909a`), and the same string shows as a small grey label in the
 bottom-right corner of every page (`.app-version`, hidden on print). Bump
 **both** — every `?v=` tag and the `.app-version` text — together whenever
 you push a JS/CSS change; otherwise a phone/browser that already cached the

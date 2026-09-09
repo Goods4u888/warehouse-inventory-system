@@ -120,6 +120,24 @@ main {
 .card-meta { color: var(--ink-3); font-size: var(--t-micro); margin-top: 2px; }
 .card-list { display: flex; flex-direction: column; gap: var(--s3); }
 
+/* Manage Items row head: the bulk-print checkbox sits before the
+   title/meta block, so this overrides .card-row's space-between with a
+   plain left-aligned flow instead of pushing the two apart. */
+.card-row.mi-row-head { justify-content: flex-start; }
+.mi-check { display: inline-flex; align-items: center; gap: var(--s2); cursor: pointer; }
+.mi-check input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--ink); cursor: pointer; }
+
+/* Manage Items bulk-print toolbar — sits above the Active/Inactive lists,
+   outside them, so it isn't rebuilt every time renderManageItemsLists()
+   redraws those two containers (see openManageItemsSheet()/
+   wireManageItemsForm() in app.js). */
+.mi-bulk-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--s3);
+  padding: var(--s3); margin: var(--s5) 0 0;
+  background: var(--paper-2); border-radius: var(--r-media);
+}
+.mi-select-all span { font-size: var(--t-meta); font-weight: 600; }
+
 .stat-figure { font-family: var(--mono); font-size: var(--t-h1); font-weight: 600; letter-spacing: -.01em; }
 .stat-label { font-size: var(--t-micro); color: var(--ink-3); letter-spacing: .04em; text-transform: uppercase; }
 
@@ -372,6 +390,16 @@ td.num, th.num { text-align: right; font-family: var(--mono); }
    letterhead/table styling. */
 .admin-print-sticker { display: none; }
 
+/* .admin-print-sheet (admin.html) is the print-only target for Manage
+   Items' "Print selected" bulk action (printSelectedStickers() in app.js):
+   every checked item's sticker, laid out as a grid to cut apart from plain
+   A4 paper — no specific label-sheet brand/alignment to match, so sticker
+   size/spacing here is free to pick (kept generous enough to stay easily
+   scannable once cut out). Same hide/show pattern as .admin-print-sticker,
+   kept as its own element so a single-item reprint and a bulk sheet can
+   never be mid-populated at the same time. */
+.admin-print-sheet { display: none; }
+
 @media print {
   .header, .tabbar, .btn, .toast, .no-print, .login-screen, .scrim { display: none !important; }
   body { background: #fff; }
@@ -384,6 +412,25 @@ td.num, th.num { text-align: right; font-family: var(--mono); }
   .confirm-code { background: #fff !important; color: #111 !important; border: 1px solid #ccc; }
   .print-sheet { display: block; color: #111; }
   .admin-print-sticker { display: block; color: #111; }
+
+  .admin-print-sheet.print-sticker-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6mm;
+    padding: 8mm;
+    color: #111;
+  }
+  /* Each sticker fills its grid cell rather than sitting at its natural
+     "fit-content" width (the on-screen/single-print sizing) — otherwise a
+     short SKU name leaves a lot of dead space between cut lines. The
+     dashed border doubles as the cut guide. break-inside/page-break-inside
+     stop a sticker from being sliced across two pages when the grid runs
+     long. */
+  .print-sticker-grid .sticker {
+    width: 100%; box-sizing: border-box;
+    border: 1px dashed #999;
+    break-inside: avoid; page-break-inside: avoid;
+  }
 }
 
 /* ---- Printable requisition slip (request.html, print/PDF only) — modeled
