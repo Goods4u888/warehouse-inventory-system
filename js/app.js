@@ -608,24 +608,36 @@ function miRowHtml(s) {
   `;
 }
 
-// Print an item's permanent sticker on demand from Manage Items — not tied
-// to a receive/return event. Renders into a dedicated print-only container
-// (see .admin-print-sticker in app.css and admin.html) rather than reusing
-// .print-sheet, since that one carries request.html's letterhead/table
-// styling which doesn't apply here.
-function printSkuSticker(sku) {
-  const box = document.getElementById('admin-print-sticker');
-  box.innerHTML = QR.stickerHtml({ skuCode: sku.sku_code, skuName: sku.name, idPrefix: 'mi-sticker-qr-' });
-  QR.renderInto(document.getElementById(`mi-sticker-qr-${sku.sku_code}`), sku.sku_code, 120);
+// A single item's sticker is never printed just once: physically you need
+// one for the shelf/bin plus spares (a worn sticker, a second bin holding
+// the same item, etc.), so every "print sticker" action for one item
+// prints a full A4 sheet of repeated copies instead of a lone sticker.
+// Reuses the same grid layout as the bulk "Print selected" action below
+// (.print-sticker-grid in app.css) — just every cell is the same item.
+// idPrefix must be unique per caller (Manage Items / Receive / Return all
+// call this) so their copies' QR container ids never collide if two of
+// these somehow render back to back.
+const STICKERS_PER_SHEET = 20;
+function printStickerSheet(sku, idPrefix) {
+  const box = document.getElementById('admin-print-sheet');
+  const copies = Array.from({ length: STICKERS_PER_SHEET }, (_, i) => i);
+  box.innerHTML = copies
+    .map((i) => QR.stickerHtml({ skuCode: sku.sku_code, skuName: sku.name, idPrefix: `${idPrefix}${i}-` }))
+    .join('');
+  copies.forEach((i) => QR.renderInto(document.getElementById(`${idPrefix}${i}-${sku.sku_code}`), sku.sku_code, 120));
   window.print();
 }
 
-// Bulk version of printSkuSticker(): every checked Manage Items row, laid
-// out as a grid of individually-cuttable stickers on plain A4 paper (no
+// Print an item's permanent sticker on demand from Manage Items — not tied
+// to a receive/return event.
+function printSkuSticker(sku) {
+  printStickerSheet(sku, 'mi-sticker-qr-');
+}
+
+// Bulk version: every checked Manage Items row, one sticker each, laid out
+// as a grid of individually-cuttable stickers on plain A4 paper (no
 // specific label-sheet brand/alignment to match — see .print-sticker-grid
-// in app.css). Renders into its own print-only container (parallel to
-// #admin-print-sticker) so a single-item reprint elsewhere never collides
-// with a bulk sheet mid-print.
+// in app.css).
 function printSelectedStickers() {
   const items = miAllSkus.filter((s) => miSelectedIds.has(s.id));
   if (!items.length) {
@@ -738,7 +750,7 @@ function renderReceiveResult(sku, qty, uom) {
       <button class="btn btn-outline btn-block" style="margin-top:var(--s4)" id="btn-print-sticker">${icon('printer', 16)}<span>${t('btnPrintSticker')}</span></button>
     </div>`;
   QR.renderInto(document.getElementById(`sticker-qr-${sku.sku_code}`), sku.sku_code, 120);
-  document.getElementById('btn-print-sticker').addEventListener('click', () => window.print());
+  document.getElementById('btn-print-sticker').addEventListener('click', () => printStickerSheet(sku, 'rc-sticker-qr-'));
 }
 
 // ---- Receive / Return mode toggle -------------------------------------------
@@ -826,7 +838,7 @@ function renderReturnResult(sku, qty, uom) {
       <button class="btn btn-outline btn-block" style="margin-top:var(--s4)" id="btn-print-return-sticker">${icon('printer', 16)}<span>${t('btnPrintSticker')}</span></button>
     </div>`;
   QR.renderInto(document.getElementById(`sticker-qr-${sku.sku_code}`), sku.sku_code, 120);
-  document.getElementById('btn-print-return-sticker').addEventListener('click', () => window.print());
+  document.getElementById('btn-print-return-sticker').addEventListener('click', () => printStickerSheet(sku, 'rt-sticker-qr-'));
 }
 
 // ============================================================================

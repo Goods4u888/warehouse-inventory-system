@@ -376,6 +376,7 @@ main {
   background: #fff; color: #111; border: 1px solid #ccc; border-radius: 8px;
   padding: var(--s3); width: fit-content;
 }
+.sticker-logo { height: 16px; width: auto; margin-bottom: 3px; }
 .sticker-sku { font-weight: 700; font-size: 13px; }
 .sticker-date { font-size: 11px; color: #555; margin-top: 2px; }
 
@@ -436,22 +437,14 @@ td.num, th.num { text-align: right; font-family: var(--mono); }
    Hidden here, shown only under @media print below. */
 .print-sheet { display: none; }
 
-/* .admin-print-sticker (admin.html) is the print-only target for the
-   Manage Items "Print sticker" action — a one-off reprint of an item's
-   permanent QR, populated just before window.print() (see
-   printSkuSticker() in app.js). Same hide/show pattern as .print-sheet
-   above, kept as its own element since it carries none of that one's
-   letterhead/table styling. */
-.admin-print-sticker { display: none; }
-
-/* .admin-print-sheet (admin.html) is the print-only target for Manage
-   Items' "Print selected" bulk action (printSelectedStickers() in app.js):
-   every checked item's sticker, laid out as a grid to cut apart from plain
-   A4 paper — no specific label-sheet brand/alignment to match, so sticker
-   size/spacing here is free to pick (kept generous enough to stay easily
-   scannable once cut out). Same hide/show pattern as .admin-print-sticker,
-   kept as its own element so a single-item reprint and a bulk sheet can
-   never be mid-populated at the same time. */
+/* .admin-print-sheet (admin.html) is the print-only target every sticker
+   print action populates — a single item's repeated-copy sheet
+   (printStickerSheet() in app.js, used by Manage Items/Receive/Return) or
+   Manage Items' "Print selected" bulk action (printSelectedStickers()):
+   either way, a grid of stickers to cut apart from plain A4 paper — no
+   specific label-sheet brand/alignment to match, so sticker size/spacing
+   here is free to pick (kept generous enough to stay easily scannable once
+   cut out). Same hide/show pattern as .print-sheet above. */
 .admin-print-sheet { display: none; }
 
 @media print {
@@ -465,7 +458,6 @@ td.num, th.num { text-align: right; font-family: var(--mono); }
   }
   .confirm-code { background: #fff !important; color: #111 !important; border: 1px solid #ccc; }
   .print-sheet { display: block; color: #111; }
-  .admin-print-sticker { display: block; color: #111; }
 
   .admin-print-sheet.print-sticker-grid {
     display: grid;

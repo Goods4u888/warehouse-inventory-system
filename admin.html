@@ -8,8 +8,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 
-<link rel="stylesheet" href="css/tokens.css?v=20260909g">
-<link rel="stylesheet" href="css/app.css?v=20260909g">
+<link rel="stylesheet" href="css/tokens.css?v=20260909i">
+<link rel="stylesheet" href="css/app.css?v=20260909i">
 </head>
 <body>
 
@@ -264,31 +264,29 @@
 
 <div id="toast-host"></div>
 
-<!-- Print-only container for the Manage Items "Print sticker" action — a
-     one-off reprint of an item's permanent QR, not tied to a receive/return
-     event. Kept separate from request.html's .print-sheet (letterhead +
-     requisition table styling that doesn't apply here). -->
-<div class="admin-print-sticker" id="admin-print-sticker"></div>
-
-<!-- Print-only container for Manage Items' "Print selected" bulk action —
-     a grid of every checked item's sticker, sized to be cut apart from a
-     plain A4 sheet (see .print-sticker-grid in app.css). Kept separate from
-     #admin-print-sticker (single-item reprint) so the two can never be
-     mid-populated at the same time. -->
+<!-- Print-only container every "print sticker" action renders into —
+     Manage Items' single-item reprint, Receive/Return's post-confirm print,
+     and Manage Items' "Print selected" bulk action all populate this same
+     grid (see printStickerSheet()/printSelectedStickers() in app.js): a
+     single item prints STICKERS_PER_SHEET repeated copies, a bulk selection
+     prints one sticker per item — either way, individually-cuttable stickers
+     on plain A4 paper (see .print-sticker-grid in app.css). Kept separate
+     from request.html's .print-sheet (letterhead + requisition table
+     styling that doesn't apply here). -->
 <div class="admin-print-sheet print-sticker-grid" id="admin-print-sheet"></div>
 
-<div class="app-version no-print">v20260909g</div>
+<div class="app-version no-print">v20260909i</div>
 
 <!-- Third-party: Supabase client, QR generation, QR scanning -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.js"></script>
 
-<script src="js/config.js?v=20260909g"></script>
-<script src="js/db.js?v=20260909g"></script>
-<script src="js/qr.js?v=20260909g"></script>
-<script src="js/i18n.js?v=20260909g"></script>
-<script src="js/icons.js?v=20260909g"></script>
-<script src="js/app.js?v=20260909g"></script>
+<script src="js/config.js?v=20260909i"></script>
+<script src="js/db.js?v=20260909i"></script>
+<script src="js/qr.js?v=20260909i"></script>
+<script src="js/i18n.js?v=20260909i"></script>
+<script src="js/icons.js?v=20260909i"></script>
+<script src="js/app.js?v=20260909i"></script>
 </body>
 </html>

@@ -44,6 +44,7 @@ const QR = {
       <div class="sticker">
         <div class="sticker-qr" id="${idPrefix}${skuCode}"></div>
         <div class="sticker-text">
+          <img class="sticker-logo" src="img/logo-property-office.png" alt="">
           <div class="sticker-sku">${skuCode} · ${skuName}</div>
           ${eventLabel && eventDate ? `<div class="sticker-date">${eventLabel} ${eventDate}</div>` : ''}
         </div>
