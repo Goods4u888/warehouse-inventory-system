@@ -52,6 +52,15 @@ in the database enforces this split for real, not just in the UI — see
    seed, and re-running it is a no-op. Delete rows you don't want from the
    Supabase table editor, or skip this file entirely for a clean start — it's
    optional. (Regenerate or edit the list from `scripts/gen_mockup_seed.py`.)
+   `supabase/seed_mockup_interior_100.sql` adds a second, independent ~100-item
+   catalog in the same style, themed around interior/building-maintenance work
+   instead of construction-site materials — flooring, ceilings, furniture,
+   curtains & blinds (four new categories, added by this file), plus more
+   interior-relevant items folded into Hardware, Electrical, Sanitary Ware,
+   Paint, Lumber, and Cleaning Supplies. Run it any time after `schema.sql`,
+   independently of `seed_mockup_100.sql` (either order, both, or neither) —
+   its `sku_code`s don't collide with either. (Regenerate or edit from
+   `scripts/gen_mockup_seed_interior.py`.)
 3. **Create the shared admin login, once.** Admin access is real Supabase
    Auth under the hood, but the app only ever asks staff for a password — the
    email is a fixed, non-mailbox identifier the app already knows
@@ -250,6 +259,8 @@ js/request.js                  request.html's own small, standalone script
 supabase/schema.sql            tables, views, RPCs, RLS policies, 5-item seed
 supabase/seed_mockup_100.sql   optional ~100-item Thai demo catalog (see Setup step 2)
 scripts/gen_mockup_seed.py     regenerates seed_mockup_100.sql from an editable Python list
+supabase/seed_mockup_interior_100.sql   optional ~100-item interior/maintenance catalog (see Setup step 2)
+scripts/gen_mockup_seed_interior.py     regenerates seed_mockup_interior_100.sql
 ```
 
 ## Deploy version / cache-busting

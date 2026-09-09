@@ -48,6 +48,10 @@ const ICON_PATHS = {
   roller: '<rect x="3" y="4" width="14" height="6" rx="1.5"/><line x1="7" y1="10" x2="7" y2="14"/><rect x="5" y="14" width="4" height="6" rx="1"/>',
   planks: '<rect x="3" y="5" width="18" height="3.2" rx="1"/><rect x="3" y="10.4" width="18" height="3.2" rx="1"/><rect x="3" y="15.8" width="18" height="3.2" rx="1"/>',
   sparkle: '<path d="M12 3v4M12 17v4M5 5.5l2.8 2.8M16.2 15.7l2.8 2.8M3 12h4M17 12h4M5 18.5l2.8-2.8M16.2 8.3l2.8-2.8"/>',
+  tile: '<rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/>',
+  ceilingGrid: '<rect x="3" y="4" width="18" height="16" rx="1"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="3" y1="16" x2="21" y2="16"/><line x1="9" y1="4" x2="9" y2="20"/><line x1="15" y1="4" x2="15" y2="20"/>',
+  chair: '<path d="M6 3v9a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V3"/><line x1="8" y1="14" x2="8" y2="21"/><line x1="16" y1="14" x2="16" y2="21"/><line x1="6" y1="8" x2="18" y2="8"/>',
+  curtain: '<path d="M4 4h16"/><path d="M7 4c2 5 2 11 0 16"/><path d="M17 4c-2 5-2 11 0 16"/><path d="M12 4c1 5 1 11 0 16"/>',
 
   // landing page badges
   lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
@@ -65,6 +69,7 @@ const CAT_ICONS = {
   'Pipe & Fittings': 'pipe', Hardware: 'wrench',
   Electrical: 'zap', 'Sanitary Ware': 'droplet', Paint: 'roller',
   Lumber: 'planks', 'Cleaning Supplies': 'sparkle',
+  Flooring: 'tile', Ceiling: 'ceilingGrid', Furniture: 'chair', 'Curtains & Blinds': 'curtain',
 };
 function catIcon(category) {
   return CAT_ICONS[category] || 'box';

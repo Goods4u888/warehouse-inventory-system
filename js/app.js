@@ -8,6 +8,7 @@ const CATS = {
   'Pipe & Fittings': 'hardware', Hardware: 'hardware',
   Electrical: 'electrical', 'Sanitary Ware': 'sanitary', Paint: 'paint',
   Lumber: 'lumber', 'Cleaning Supplies': 'cleaning',
+  Flooring: 'flooring', Ceiling: 'ceiling', Furniture: 'furniture', 'Curtains & Blinds': 'curtains',
 };
 function catClass(category) {
   return CATS[category] || 'other';

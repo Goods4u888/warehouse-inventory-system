@@ -68,6 +68,10 @@
   --cat-paint:     #6B4368;  --cat-paint-wash:     #F0E3EF;  --cat-paint-beacon:     #9C6B98;
   --cat-lumber:    #8B5E34;  --cat-lumber-wash:    #F1E6D8;  --cat-lumber-beacon:    #B98A54;
   --cat-cleaning:  #2E6B8F;  --cat-cleaning-wash:  #E2EEF3;  --cat-cleaning-beacon:  #5FA0C2;
+  --cat-flooring:  #A85A2E;  --cat-flooring-wash:  #F5E8DC;  --cat-flooring-beacon:  #D69A66;
+  --cat-ceiling:   #55707A;  --cat-ceiling-wash:   #E7EDEF;  --cat-ceiling-beacon:   #86A3AC;
+  --cat-furniture: #7A3B4A;  --cat-furniture-wash: #F3E4E8;  --cat-furniture-beacon: #B37886;
+  --cat-curtains:  #6E5A96;  --cat-curtains-wash:  #ECE8F5;  --cat-curtains-beacon:  #A594C9;
   --cat-other:     #5A5A58;  --cat-other-wash:     #EBEAE6;  --cat-other-beacon:     #8B8B86;
 
   /* elevation: mostly a 1px ring, barely any shadow — flat like the reference */
@@ -150,6 +154,10 @@
     --cat-paint:     #B58FB2;  --cat-paint-wash:     #271F26;  --cat-paint-beacon:     #7A4F76;
     --cat-lumber:    #C7A06D;  --cat-lumber-wash:    #2A2115;  --cat-lumber-beacon:    #8F6A3E;
     --cat-cleaning:  #7FB8D9;  --cat-cleaning-wash:  #1C262E;  --cat-cleaning-beacon:  #3E7896;
+    --cat-flooring:  #D9975F;  --cat-flooring-wash:  #2A2015;  --cat-flooring-beacon:  #A9713F;
+    --cat-ceiling:   #8FB0BA;  --cat-ceiling-wash:   #1E2528;  --cat-ceiling-beacon:   #5C7880;
+    --cat-furniture: #C08A97;  --cat-furniture-wash: #2A1E21;  --cat-furniture-beacon: #8F5865;
+    --cat-curtains:  #A99BC9;  --cat-curtains-wash:  #241F2E;  --cat-curtains-beacon:  #7C699C;
     --cat-other:     #A2A29C;  --cat-other-wash:     #242420;  --cat-other-beacon:     #6E6E67;
 
     --lift-1: 0 0 0 1px rgba(0,0,0,.35), 0 1px 2px rgba(0,0,0,.3);
