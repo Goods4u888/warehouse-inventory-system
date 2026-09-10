@@ -655,19 +655,31 @@ function printSkuSticker(sku, count) {
   printStickerSheet(sku, 'mi-sticker-qr-', count);
 }
 
-// Bulk version: every checked Manage Items row, one sticker each, laid out
-// as a grid of individually-cuttable stickers on plain A4 paper (no
-// specific label-sheet brand/alignment to match — see .print-sticker-grid
-// in app.css).
+// Bulk version: every checked Manage Items row, laid out as a grid of
+// individually-cuttable stickers on plain A4 paper (no specific
+// label-sheet brand/alignment to match — see .print-sticker-grid in
+// app.css). Each item prints as many copies as its own row's "Copies"
+// field says (readStickerCount, same field the single-item print button
+// next to it reads) — not just one each — so a bulk run behaves exactly
+// like running "Print sticker" on every checked row in turn. Copy index
+// is folded into each QR container's id since the same sku_code can
+// legitimately need more than one container on screen at once here.
 function printSelectedStickers() {
   const items = miAllSkus.filter((s) => miSelectedIds.has(s.id));
   if (!items.length) {
     toast(t('toastNoItemsSelected'), 'error');
     return;
   }
+  const jobs = [];
+  items.forEach((s) => {
+    const count = readStickerCount(`mi-print-qty-${s.id}`);
+    for (let i = 0; i < count; i++) jobs.push({ sku: s, i });
+  });
   const box = document.getElementById('admin-print-sheet');
-  box.innerHTML = items.map((s) => QR.stickerHtml({ skuCode: s.sku_code, skuName: s.name, idPrefix: 'mi-bulk-qr-' })).join('');
-  items.forEach((s) => QR.renderInto(document.getElementById(`mi-bulk-qr-${s.sku_code}`), s.sku_code, 120));
+  box.innerHTML = jobs
+    .map(({ sku, i }) => QR.stickerHtml({ skuCode: sku.sku_code, skuName: sku.name, idPrefix: `mi-bulk-qr-${i}-` }))
+    .join('');
+  jobs.forEach(({ sku, i }) => QR.renderInto(document.getElementById(`mi-bulk-qr-${i}-${sku.sku_code}`), sku.sku_code, 120));
   window.print();
 }
 
