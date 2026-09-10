@@ -73,6 +73,49 @@ begin
 end $$;
 
 -- ----------------------------------------------------------------------------
+-- 1c. User profiles — one row per real person, keyed to their Supabase Auth
+--     user (auth.users, Supabase's own schema — not created here). Every
+--     authenticated caller is expected to have exactly one row here; role
+--     drives what the app shows them (js/app.js) and, for requests, what
+--     Row Level Security actually lets them see (see section 8 below).
+--     Accounts themselves are still created by hand in the Supabase
+--     dashboard (Authentication -> Users -> Add user, same mechanism the
+--     original single shared admin login already used) — this table is
+--     just each person's name/role/department on top of that. See
+--     README.md for how to add a person going forward (the in-app Manage
+--     Staff screen) and the one-time bootstrap below.
+-- ----------------------------------------------------------------------------
+create table if not exists user_profiles (
+  id          uuid primary key references auth.users(id) on delete cascade,
+  name        text not null,
+  role        text not null check (role in ('requester','staff','admin')),
+  department  text,
+  is_active   boolean not null default true,
+  created_at  timestamptz not null default now()
+);
+
+comment on table user_profiles is 'One row per real person. role drives UI access (app.js) and, for requests, Row Level Security.';
+
+-- Bootstrap: if the original shared admin@warehouse.local account exists
+-- and doesn't have a profile yet, give it one automatically — otherwise the
+-- moment this file introduces RLS policies that require a user_profiles
+-- row to see/manage requests (section 8 below), that account would lose
+-- access to its own data until someone manually fixes it up. Safe to
+-- re-run: only ever inserts once (on conflict do nothing), and does
+-- nothing at all if that account was never created.
+do $$
+declare
+  v_admin_id uuid;
+begin
+  select id into v_admin_id from auth.users where email = 'admin@warehouse.local';
+  if v_admin_id is not null then
+    insert into user_profiles (id, name, role)
+    values (v_admin_id, 'Admin', 'admin')
+    on conflict (id) do nothing;
+  end if;
+end $$;
+
+-- ----------------------------------------------------------------------------
 -- 2. Lots — LEGACY as of 2026-09-08. Originally one row per receiving
 --    event, with its own QR sticker per batch. The system now uses one
 --    permanent QR sticker per ITEM instead (see skus.qty_on_hand and the
@@ -185,6 +228,22 @@ alter table requests add column if not exists department text;
 -- column itself stays nullable so rows created before this field existed
 -- aren't left with a constraint they can't satisfy.
 alter table requests add column if not exists work_area text;
+
+-- Real identity, added alongside the role system (see "1c. User profiles"
+-- above). Both nullable: neither the anonymous public form nor
+-- pre-existing rows ever set them. requester_user_id is which logged-in
+-- Requester submitted this — stamped server-side by
+-- create_authenticated_request() below, never trusted from the client.
+-- approved_by is whichever staff/admin last changed the status, stamped
+-- server-side by set_request_status() below. Both reference
+-- user_profiles(id) rather than auth.users(id) directly — same underlying
+-- identity (user_profiles.id already references auth.users), but this way
+-- PostgREST can embed the name in one query (DB.listRequests() in
+-- js/db.js), and both RPCs already guarantee a profile exists before they
+-- ever set these columns (create_authenticated_request looks its caller's
+-- profile up first; set_request_status's RLS requires one to pass at all).
+alter table requests add column if not exists requester_user_id uuid references user_profiles(id);
+alter table requests add column if not exists approved_by uuid references user_profiles(id);
 
 do $$
 begin
@@ -545,6 +604,26 @@ begin
 end;
 $$;
 
+-- Shared by create_public_request() and create_authenticated_request()
+-- below: the next REQ-YYMMDD-NNN code, from the same atomic per-day
+-- counter both used inline before this was extracted — one place instead
+-- of two. Not security definer itself; both callers already are, so it
+-- inherits their privileges when they call it.
+create or replace function next_request_code() returns text
+language plpgsql
+as $$
+declare
+  v_seq int;
+begin
+  insert into request_sequences (seq_date, last_seq)
+  values (current_date, 1)
+  on conflict (seq_date) do update set last_seq = request_sequences.last_seq + 1
+  returning last_seq into v_seq;
+
+  return 'REQ-' || to_char(current_date, 'YYMMDD') || '-' || lpad(v_seq::text, 3, '0');
+end;
+$$;
+
 -- The public requester form: no login. A requester can either pick a
 -- specific item (searched from the same catalog Stock/Receive use) and say
 -- how many, or just describe what they need in free text, or both — the
@@ -588,7 +667,6 @@ security definer
 set search_path = public
 as $$
 declare
-  v_seq int;
   v_code text;
   v_row requests;
   v_item jsonb;
@@ -634,12 +712,7 @@ begin
     end loop;
   end if;
 
-  insert into request_sequences (seq_date, last_seq)
-  values (current_date, 1)
-  on conflict (seq_date) do update set last_seq = request_sequences.last_seq + 1
-  returning last_seq into v_seq;
-
-  v_code := 'REQ-' || to_char(current_date, 'YYMMDD') || '-' || lpad(v_seq::text, 3, '0');
+  v_code := next_request_code();
 
   if v_item_count = 0 then
     -- comment-only request: a single row, same as before v2.2
@@ -665,6 +738,139 @@ begin
 end;
 $$;
 
+-- Authenticated request creation — the Requester role's own "new request"
+-- flow, and also what Staff/Admin's internal "+ New" now calls (one path
+-- instead of the old raw insert duplicating this). A Requester's own
+-- identity is never overridable — always their own profile, regardless of
+-- what's sent. Staff/Admin creating this on someone else's behalf (a
+-- walk-in who called it in) may still name who it's actually for via
+-- p_requester_name/p_department, same as the old raw-insert flow let
+-- them — in that case requester_user_id is left null, since the request
+-- doesn't actually belong to a logged-in Requester account. security
+-- definer for the same reason as create_public_request() above — a plain
+-- insert would need requests INSERT granted to requester-role callers,
+-- which section 8's RLS deliberately doesn't do (they only get to SELECT
+-- their own rows); running as the function owner lets this one narrow,
+-- parameter-controlled insert through without widening that policy.
+create or replace function create_authenticated_request(
+  p_sku_id uuid, p_qty numeric, p_needed_by date default null, p_notes text default null,
+  p_requester_name text default null, p_department text default null
+) returns requests
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_profile user_profiles;
+  v_sku_ok boolean;
+  v_row requests;
+  v_name text;
+  v_dept text;
+  v_requester_user_id uuid;
+begin
+  select * into v_profile from user_profiles where id = auth.uid();
+  if not found then
+    raise exception 'No profile found for this account';
+  end if;
+
+  if p_sku_id is null or p_qty is null or p_qty <= 0 then
+    raise exception 'Please choose an item and a quantity';
+  end if;
+
+  select exists(select 1 from skus where id = p_sku_id and is_active = true) into v_sku_ok;
+  if not v_sku_ok then
+    raise exception 'Selected item is not available';
+  end if;
+
+  if v_profile.role in ('staff','admin') and nullif(trim(p_requester_name), '') is not null then
+    v_name := trim(p_requester_name);
+    v_dept := nullif(trim(p_department), '');
+    v_requester_user_id := null;
+  else
+    v_name := v_profile.name;
+    v_dept := v_profile.department;
+    v_requester_user_id := auth.uid();
+  end if;
+
+  insert into requests (request_code, requester_name, department, sku_id, qty_requested, needed_by, notes, requester_user_id)
+  values (next_request_code(), v_name, v_dept, p_sku_id, p_qty, p_needed_by, p_notes, v_requester_user_id)
+  returning * into v_row;
+
+  return v_row;
+end;
+$$;
+
+-- Moving a request through pending -> preparing -> ready -> fulfilled (or
+-- cancelled). Replaces a raw client-side `update requests set status=...`
+-- (see DB.setRequestStatus in js/db.js) so approved_by can't be spoofed —
+-- it's always auth.uid(), never a parameter the client could hand in. Not
+-- security definer: runs as the caller, so section 8's RLS naturally
+-- blocks a requester-role account from calling this on anyone's request
+-- (including their own) — only staff/admin can actually move a status.
+create or replace function set_request_status(p_request_id uuid, p_status text) returns requests
+language plpgsql
+as $$
+declare
+  v_row requests;
+begin
+  if p_status not in ('pending','preparing','ready','fulfilled','cancelled') then
+    raise exception 'Invalid status';
+  end if;
+
+  update requests set status = p_status, approved_by = auth.uid()
+  where id = p_request_id
+  returning * into v_row;
+
+  if not found then
+    raise exception 'Request not found, or you do not have permission to update it';
+  end if;
+
+  return v_row;
+end;
+$$;
+
+-- Manage Staff (admin.html, admin-only) needs to turn "the email I just
+-- created in the Supabase dashboard" into the uuid a user_profiles row
+-- actually keys on — auth.users isn't exposed the way public tables are,
+-- so this is the one narrow, admin-gated way to look one up by email
+-- instead of asking an admin to copy a raw uuid out of the dashboard by
+-- hand. security definer to reach auth.users at all; the role check inside
+-- does the actual admin-only gating (RLS can't cover a table this function
+-- doesn't otherwise touch).
+create or replace function find_auth_user_id(p_email text) returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_caller_role text;
+  v_id uuid;
+begin
+  select role into v_caller_role from user_profiles where id = auth.uid();
+  if v_caller_role is distinct from 'admin' then
+    raise exception 'Admin only';
+  end if;
+
+  select id into v_id from auth.users where email = p_email;
+  return v_id;
+end;
+$$;
+
+-- Used throughout section 8's policies below: true when the caller has a
+-- staff or admin profile. Requester accounts are expected to be a much
+-- larger, less-vetted population than staff/admin (anyone across the
+-- university who requests materials, not just the warehouse team), so
+-- unlike the staff-vs-admin split (deliberately UI-only for now — see
+-- Manage Items/Reports), requester-vs-everyone-else is enforced here too:
+-- without this, a requester account could write directly to stock/catalog
+-- tables through the API even though the app's UI never shows them those
+-- screens.
+create or replace function is_staff_or_admin() returns boolean
+language sql stable
+as $$
+  select exists (select 1 from user_profiles where id = auth.uid() and role in ('staff','admin'));
+$$;
+
 -- Postgres grants EXECUTE on a new function to PUBLIC by default — revoking
 -- from just "anon" is not enough to lock an admin-only function down, since
 -- PUBLIC still covers it. Revoke PUBLIC explicitly, then grant only to the
@@ -674,12 +880,24 @@ revoke execute on function return_stock(uuid, numeric, text, text, text) from pu
 revoke execute on function issue_stock(uuid, uuid, numeric, text) from public;
 revoke execute on function create_sku(text, text, text, text, numeric, numeric) from public;
 revoke execute on function create_public_request(text, text, text, text, jsonb) from public;
+revoke execute on function next_request_code() from public;
+revoke execute on function create_authenticated_request(uuid, numeric, date, text, text, text) from public;
+revoke execute on function set_request_status(uuid, text) from public;
+revoke execute on function find_auth_user_id(text) from public;
+revoke execute on function is_staff_or_admin() from public;
 
 grant execute on function receive_stock(uuid, numeric, text, text, text) to authenticated;
 grant execute on function return_stock(uuid, numeric, text, text, text) to authenticated;
 grant execute on function issue_stock(uuid, uuid, numeric, text) to authenticated;
 grant execute on function create_sku(text, text, text, text, numeric, numeric) to authenticated;
 grant execute on function create_public_request(text, text, text, text, jsonb) to anon, authenticated;
+grant execute on function next_request_code() to authenticated;
+grant execute on function create_authenticated_request(uuid, numeric, date, text, text, text) to authenticated;
+grant execute on function set_request_status(uuid, text) to authenticated;
+grant execute on function find_auth_user_id(text) to authenticated;
+-- Called from inside policy expressions (section 8), evaluated as the
+-- querying role — authenticated needs EXECUTE for those policies to work.
+grant execute on function is_staff_or_admin() to authenticated;
 
 -- ----------------------------------------------------------------------------
 -- 8. Row Level Security
@@ -707,47 +925,123 @@ alter table lot_sequences enable row level security;
 alter table sku_sequences enable row level security;
 alter table categories enable row level security;
 alter table request_sequences enable row level security;
+alter table user_profiles enable row level security;
 
+-- user_profiles: everyone can read their own row (needed right after login
+-- just to know "who am I / what's my role" — see DB.getMyProfile() in
+-- js/db.js); admin-role callers can additionally read every row (for the
+-- Manage Staff screen) and are the only ones who can create/edit/deactivate
+-- one. Every check below looks up the CALLER's own role from this same
+-- table by auth.uid() — never anything client-supplied — so a
+-- staff/requester account can't grant itself admin by sending a different
+-- role in a request body.
+drop policy if exists "self can view own profile" on user_profiles;
+create policy "self can view own profile" on user_profiles for select to authenticated
+  using (id = auth.uid());
+
+drop policy if exists "admin can view all profiles" on user_profiles;
+create policy "admin can view all profiles" on user_profiles for select to authenticated
+  using (exists (select 1 from user_profiles p where p.id = auth.uid() and p.role = 'admin'));
+
+drop policy if exists "admin can insert profiles" on user_profiles;
+create policy "admin can insert profiles" on user_profiles for insert to authenticated
+  with check (exists (select 1 from user_profiles p where p.id = auth.uid() and p.role = 'admin'));
+
+drop policy if exists "admin can update profiles" on user_profiles;
+create policy "admin can update profiles" on user_profiles for update to authenticated
+  using (exists (select 1 from user_profiles p where p.id = auth.uid() and p.role = 'admin'))
+  with check (exists (select 1 from user_profiles p where p.id = auth.uid() and p.role = 'admin'));
+
+drop policy if exists "admin can delete profiles" on user_profiles;
+create policy "admin can delete profiles" on user_profiles for delete to authenticated
+  using (exists (select 1 from user_profiles p where p.id = auth.uid() and p.role = 'admin'));
+
+-- skus: SELECT stays open to every authenticated role, including
+-- requester — they need to search the catalog for their own new-request
+-- item picker, same list Stock/Receive already use (DB.listSkus in
+-- js/db.js). Writes (insert/update/delete — Manage Items) are staff/admin
+-- only via is_staff_or_admin() above; Staff vs Admin itself stays UI-only
+-- (Manage Items is hidden from Staff in app.js, not RLS), but a requester
+-- account genuinely can't write here even by calling the API directly.
 drop policy if exists "anon full access - skus" on skus;
 drop policy if exists "authenticated full access - skus" on skus;
 drop policy if exists "anon can view active skus" on skus;
-create policy "authenticated full access - skus" on skus for all to authenticated using (true) with check (true);
+drop policy if exists "authenticated can view skus" on skus;
+drop policy if exists "staff and admin can insert skus" on skus;
+drop policy if exists "staff and admin can update skus" on skus;
+drop policy if exists "staff and admin can delete skus" on skus;
+create policy "authenticated can view skus" on skus for select to authenticated using (true);
+create policy "staff and admin can insert skus" on skus for insert to authenticated with check (is_staff_or_admin());
+create policy "staff and admin can update skus" on skus for update to authenticated using (is_staff_or_admin()) with check (is_staff_or_admin());
+create policy "staff and admin can delete skus" on skus for delete to authenticated using (is_staff_or_admin());
 -- The public request form lets a requester search the catalog and pick an
 -- item, so anon needs read access here too — but only to active items, and
 -- only SELECT (no insert/update/delete), same "narrow surface" principle as
 -- create_public_request() above.
 create policy "anon can view active skus" on skus for select to anon using (is_active = true);
 
+-- categories: staff/admin only (Manage Items' category dropdown) — nothing
+-- a requester does ever reads this table directly; their item search reads
+-- skus.category as a plain text column, not a join.
 drop policy if exists "anon full access - categories" on categories;
 drop policy if exists "authenticated full access - categories" on categories;
-create policy "authenticated full access - categories" on categories for all to authenticated using (true) with check (true);
+create policy "staff and admin full access - categories" on categories for all to authenticated
+  using (is_staff_or_admin()) with check (is_staff_or_admin());
 
+-- lots: legacy (see "2. Lots" above) — nothing writes here anymore for any
+-- role, kept staff/admin-only same as before, just via the shared helper.
 drop policy if exists "anon full access - lots" on lots;
 drop policy if exists "authenticated full access - lots" on lots;
-create policy "authenticated full access - lots" on lots for all to authenticated using (true) with check (true);
+create policy "staff and admin full access - lots" on lots for all to authenticated
+  using (is_staff_or_admin()) with check (is_staff_or_admin());
 
 drop policy if exists "anon full access - requests" on requests;
 drop policy if exists "anyone can submit requests" on requests;
 drop policy if exists "authenticated full access - requests" on requests;
-create policy "anyone can submit requests" on requests for insert to anon, authenticated with check (true);
-create policy "authenticated full access - requests" on requests for all to authenticated using (true) with check (true);
+drop policy if exists "staff and admin full access - requests" on requests;
+drop policy if exists "requester can view own requests" on requests;
+-- Both request-creation paths — create_public_request() for anon,
+-- create_authenticated_request() for a logged-in Requester (section 7) —
+-- are security definer and so bypass RLS entirely for their own inserts.
+-- Deliberately no direct INSERT policy here for anon or requester-role: that
+-- closes off raw-inserting a request under a fabricated name/department
+-- instead of going through the RPC that pulls those from the caller's own
+-- profile. Staff/admin get full access; a requester-role account can only
+-- ever see the rows it submitted itself.
+create policy "staff and admin full access - requests" on requests for all to authenticated
+  using (is_staff_or_admin()) with check (is_staff_or_admin());
+create policy "requester can view own requests" on requests for select to authenticated
+  using (requester_user_id = auth.uid());
 
+-- transactions/discrepancies/lot_sequences/sku_sequences: staff/admin only
+-- — a requester never receives, issues, returns, or reads movement
+-- history/discrepancy reports.
 drop policy if exists "anon full access - transactions" on transactions;
 drop policy if exists "authenticated full access - transactions" on transactions;
-create policy "authenticated full access - transactions" on transactions for all to authenticated using (true) with check (true);
+create policy "staff and admin full access - transactions" on transactions for all to authenticated
+  using (is_staff_or_admin()) with check (is_staff_or_admin());
 
 drop policy if exists "anon full access - discrepancies" on discrepancies;
 drop policy if exists "authenticated full access - discrepancies" on discrepancies;
-create policy "authenticated full access - discrepancies" on discrepancies for all to authenticated using (true) with check (true);
+create policy "staff and admin full access - discrepancies" on discrepancies for all to authenticated
+  using (is_staff_or_admin()) with check (is_staff_or_admin());
 
 drop policy if exists "anon full access - lot_sequences" on lot_sequences;
 drop policy if exists "authenticated full access - lot_sequences" on lot_sequences;
-create policy "authenticated full access - lot_sequences" on lot_sequences for all to authenticated using (true) with check (true);
+create policy "staff and admin full access - lot_sequences" on lot_sequences for all to authenticated
+  using (is_staff_or_admin()) with check (is_staff_or_admin());
 
 drop policy if exists "anon full access - sku_sequences" on sku_sequences;
 drop policy if exists "authenticated full access - sku_sequences" on sku_sequences;
-create policy "authenticated full access - sku_sequences" on sku_sequences for all to authenticated using (true) with check (true);
+create policy "staff and admin full access - sku_sequences" on sku_sequences for all to authenticated
+  using (is_staff_or_admin()) with check (is_staff_or_admin());
 
+-- request_sequences: unchanged — both anon (create_public_request) and
+-- authenticated (create_authenticated_request) bump this, and both do so
+-- only from inside a security-definer function anyway, so this policy is
+-- what lets next_request_code() itself succeed when NOT called from
+-- within one of those (it isn't, currently, but kept permissive here
+-- rather than tightened, since the counter has no sensitive data to leak).
 drop policy if exists "anyone can bump request_sequences" on request_sequences;
 create policy "anyone can bump request_sequences" on request_sequences for all to anon, authenticated using (true) with check (true);
 

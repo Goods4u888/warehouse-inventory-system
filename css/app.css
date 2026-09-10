@@ -648,6 +648,101 @@ body.hub-page main { padding-bottom: var(--s6); }
 .login-brand { display: flex; flex-direction: column; align-items: center; gap: var(--s2); }
 .login-brand .header-logo { height: 48px; }
 
+/* ============================================================================
+   Cinematic entry — landing page (index.html) and the admin login screen
+   only. Everyone hits one of these two screens before they're "in" the app;
+   nothing past that point (#app-shell, once signed in) is touched here.
+   A warehouse at night: one hanging spotlight, steel racking silhouettes
+   receding into the dark. Reuses the same component classes as the rest of
+   the app (.hub-tile, .login-card, .field, .btn) — only their color/type/
+   motion changes, scoped through local --cine-* tokens defined below rather
+   than overriding --ground/--ink/etc, so nothing here can leak into the
+   operational app's own light/dark theming. Deliberately one fixed mood
+   regardless of the visitor's OS light/dark setting, same as any page that
+   commits to a single visual world.
+   (A previous attempt at a landing-specific register lived in its own
+   css/landing.css and was retired in favor of one shared stylesheet — that
+   file is gone now, and this one stays that promise by living here too,
+   just scoped tightly enough not to fight the rest of app.css.)
+   ========================================================================= */
+body.hub-page,
+.login-screen {
+  --cine-void:      #0A0B0D;
+  --cine-floor:     #16181C;
+  --cine-ink:       #F3EFE6;
+  --cine-ink-2:     #A39D8E;
+  --cine-glow:      #E8A23D;
+  --cine-glow-soft: rgba(232, 162, 61, .16);
+  --cine-glow-ink:  #1A1200;
+  --cine-line:      rgba(243, 239, 230, .12);
+  --cine-tag-face:  'Oswald', var(--ui);
+}
+body.hub-page { background: var(--cine-void); color: var(--cine-ink); overflow-x: hidden; }
+.login-screen { background: var(--cine-void); color: var(--cine-ink); }
+
+.cine-backdrop { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+.cine-spotlight {
+  position: absolute; left: 50%; top: -25%; width: 900px; height: 900px;
+  transform: translateX(-50%);
+  background: radial-gradient(circle, var(--cine-glow-soft) 0%, transparent 65%);
+  animation: cine-breathe 12s ease-in-out infinite alternate;
+}
+.cine-racking { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 34vh; color: var(--cine-line); }
+@keyframes cine-breathe { from { opacity: .65; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .cine-spotlight { animation: none; } }
+
+body.hub-page .app, .login-screen .login-card { position: relative; z-index: 1; }
+body.hub-page .app,
+.login-screen .login-card {
+  animation: cine-rise .7s var(--ease) both;
+}
+@keyframes cine-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  body.hub-page .app, .login-screen .login-card { animation: none; }
+}
+
+.cine-tag {
+  font-family: var(--cine-tag-face); font-size: .75rem; font-weight: 500;
+  letter-spacing: .3em; text-transform: uppercase; color: var(--cine-glow);
+  margin: 0 0 var(--s2);
+}
+
+body.hub-page .header { background: transparent; border-bottom-color: var(--cine-line); }
+body.hub-page .header-title, .login-screen .header-title { color: var(--cine-ink); }
+body.hub-page .header-sub { color: var(--cine-ink-2); }
+body.hub-page .eyebrow, .login-screen .eyebrow { color: var(--cine-ink-2); }
+body.hub-page .app-version, .login-screen .app-version { color: var(--cine-ink-2); }
+body.hub-page .btn-ghost, .login-screen .btn-ghost { color: var(--cine-ink-2); }
+body.hub-page .btn-ghost:hover, .login-screen .btn-ghost:hover { color: var(--cine-ink); background: rgba(243, 239, 230, .08); }
+
+body.hub-page .hub-tile {
+  background: linear-gradient(180deg, var(--cine-floor), var(--cine-void));
+  border: 1px solid var(--cine-line); box-shadow: 0 20px 60px rgba(0, 0, 0, .5);
+}
+body.hub-page .hub-tile:hover, body.hub-page .hub-tile:focus-visible {
+  border-color: var(--cine-glow); transform: translateY(-4px);
+  box-shadow: 0 0 0 1px var(--cine-glow), 0 24px 60px rgba(232, 162, 61, .22);
+}
+body.hub-page .hub-tile-icon { background: var(--cine-glow-soft); color: var(--cine-glow); }
+body.hub-page .hub-tile-desc { color: var(--cine-ink-2); }
+body.hub-page .hub-tile-cta { color: var(--cine-glow); }
+body.hub-page .chip-ok { background: rgba(46, 125, 84, .22); color: #74D19E; }
+body.hub-page .chip-neutral { background: rgba(243, 239, 230, .1); color: var(--cine-ink-2); }
+
+.login-screen .login-card {
+  background: linear-gradient(180deg, var(--cine-floor), var(--cine-void));
+  border: 1px solid var(--cine-line); box-shadow: 0 30px 80px rgba(0, 0, 0, .6);
+}
+.login-screen .field label { color: var(--cine-ink-2); }
+.login-screen .field input {
+  background: rgba(243, 239, 230, .06); color: var(--cine-ink); border-color: var(--cine-line);
+}
+.login-screen .field input:focus { border-color: var(--cine-glow); box-shadow: 0 0 0 3px var(--cine-glow-soft); }
+.login-screen .btn-primary { background: var(--cine-glow); color: var(--cine-glow-ink); }
+.login-screen .btn-primary:hover { background: #F2B25C; }
+.login-screen .field-hint, .login-screen a.field-hint { color: var(--cine-ink-2); }
+.login-screen #login-error .form-error { background: rgba(178, 59, 59, .2); color: #F0A5A2; }
+
 /* ---- Public request confirmation / printable receipt (request.html) ------------------- */
 .confirm-card { text-align: center; padding: var(--s6) var(--s5); }
 .confirm-check { color: var(--ok); margin: 0 auto var(--s3); display: flex; justify-content: center; }

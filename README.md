@@ -61,17 +61,18 @@ in the database enforces this split for real, not just in the UI — see
    independently of `seed_mockup_100.sql` (either order, both, or neither) —
    its `sku_code`s don't collide with either. (Regenerate or edit from
    `scripts/gen_mockup_seed_interior.py`.)
-3. **Create the shared admin login, once.** Admin access is real Supabase
-   Auth under the hood, but the app only ever asks staff for a password — the
-   email is a fixed, non-mailbox identifier the app already knows
-   (`admin@warehouse.local`), not something anyone types in. In your Supabase
+3. **Create the first admin account, once.** `admin.html` now uses real
+   per-person Supabase Auth accounts — three roles (Requester, Staff, Admin;
+   see "Roles" below) rather than one shared password. In your Supabase
    project: **Authentication → Users → Add user**, email
    `admin@warehouse.local`, pick a password, and toggle **Auto Confirm User**
    on (so it doesn't wait on a confirmation email that will never arrive).
-   Share that password with whoever should reach `admin.html`; anyone without
-   it only ever sees the login screen, and the database itself (not just the
-   UI) refuses every admin query without it — see "Public form vs. admin
-   login" below. Change the password any time from that same Users screen.
+   Running `schema.sql` automatically gives that specific email an `admin`
+   profile the moment it exists (see the bootstrap block under "1c. User
+   profiles" in the file) — so create the account *before* or *after*
+   running the schema, either order works. Sign in with it, then add
+   everyone else from inside the app (see "Roles" below) — no more SQL
+   needed after this one bootstrap account.
 4. **Credentials are already wired up** in `js/config.js` (your project URL
    and anon/publishable key). If you ever rotate the anon key, update it
    there — never put the `service_role` key in this file, it bypasses Row
@@ -135,11 +136,12 @@ in the database enforces this split for real, not just in the UI — see
   Scan/Issue matching logic, which already works sku-by-sku. The item search
   only ever shows active items (never deactivated ones), via a narrow
   read-only RLS policy — see "Public form vs. admin login" below.
-- **Admin login** (`admin.html`) — a single shared password gates the whole
-  admin app (Stock, Receive, Scan, Requests, Reports). It's real Supabase
-  Auth underneath (see Setup step 3), so this isn't just a UI curtain: Row
-  Level Security refuses admin data to anyone who hasn't signed in, at the
-  database level.
+- **Admin login** (`admin.html`) — real, per-person Supabase Auth accounts
+  gate the admin app, each with its own role (Requester / Staff / Admin —
+  see "Roles" below) deciding what they see: Stock, Receive, Scan, Requests,
+  Reports. This isn't just a UI curtain: Row Level Security refuses
+  Requester accounts real database access to anything past their own
+  requests, at the database level.
 - **Stock** — current on-hand quantity per SKU (one running total,
   `qty_on_hand`, kept directly on the item — see "One QR per item" below),
   filterable by category and searchable by SKU code or name, with a
@@ -220,17 +222,46 @@ in the database enforces this split for real, not just in the UI — see
   items stay invisible to it), and insert a new row into `requests`, only
   through the `create_public_request()` function, which only accepts a
   name/department/comment/item/quantity — it can't read, edit, or delete
-  anything, including the row it just created. Every other table, and every
-  other operation on `skus`/`requests` (editing the catalog, search, status
-  changes, fulfillment), requires the "authenticated" role, which only
-  exists after `Auth.signIn()` succeeds against the one shared admin account
-  (Setup step 3). "Picked up by" / "requester name" stay free-text fields
-  rather than per-person identities even for logged-in staff — so within the
-  admin side, they're still a record of what someone typed, not a
-  cryptographic guarantee of who did what. Moving to per-staff accounts
-  (Requester / Staff / Admin roles, matching the spec's User entity) is a
-  further policy change, not a redesign — the shared-login groundwork is
-  already in place.
+  anything, including the row it just created. Everything past that door
+  requires a real, per-person login — see "Roles" below.
+- **Roles.** `admin.html` is gated by real Supabase Auth accounts, one per
+  person, each with a `user_profiles` row (name/role/department — see
+  "1c. User profiles" in `schema.sql`). Three roles:
+  - **Requester** — logs in, submits item requests tied to their own
+    identity (`requester_user_id`), and sees only their own request
+    history. This is separate from, and additional to, the anonymous
+    public form above — that stays open to anyone with the link; a
+    Requester account is for someone who asks often enough to want their
+    own login and history.
+  - **Staff** — "handles stock": Stock (view), Receive/Return, Scan/Issue,
+    and the full Requests queue (progress status, fulfill via scan,
+    including on a Requester's behalf).
+  - **Admin** — everything Staff has, plus Manage Items, Reports, and
+    Manage Staff (adding people and setting their role).
+
+  Staff-vs-Admin (Manage Items/Reports) is enforced in the app's UI only —
+  not by Row Level Security — since both are already trusted, logged-in
+  warehouse staff; a small risk accepted deliberately for a small team.
+  Requester-vs-everyone-else *is* enforced at the database level
+  (`is_staff_or_admin()` in `schema.sql`), since Requester accounts are
+  expected to be a much larger, less-vetted population — anyone across the
+  organization who requests materials, not just the warehouse team.
+
+  Approving a request now records *who*: `set_request_status()` stamps
+  `approved_by` from the caller's own session, never a client-supplied
+  value — shown as "Approved by `<name>`" once a request moves past
+  pending. "Picked up by" (captured at the Scan/Issue step) stays a
+  free-text field, same as before — a natural follow-up once this pattern
+  proves out, not done in this pass.
+
+  **Adding a person:** create their login the same way the bootstrap admin
+  account was created (Setup step 3 — Supabase dashboard, Authentication →
+  Users → Add user), then, signed in as an Admin, open **Manage Staff**
+  (the people icon next to the language toggle) and add their email, name,
+  role, and department. The email must already exist as a login — Manage
+  Staff only manages the profile layered on top of it, since there's no
+  `service_role` key in this app to create logins from the browser (see
+  Setup step 4).
 - **Unit conversion is stored, not yet enforced in the UI.** `alt_uom` and
   `conversion_factor` exist on each SKU, but Receive and Issue currently work
   in the SKU's base unit only. Wiring the conversion into the receive form

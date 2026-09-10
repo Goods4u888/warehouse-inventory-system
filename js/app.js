@@ -1165,6 +1165,7 @@ function renderRequestsList() {
         ${nextStatusButton(r)}
       </div>
       ${r.status === 'fulfilled' && r.picked_up_by ? `<div class="card-meta" style="margin-top:var(--s2)">${escapeHtml(t('pickedUpBy', r.picked_up_by))}</div>` : ''}
+      ${r.approver?.name ? `<div class="card-meta" style="margin-top:var(--s1)">${escapeHtml(t('approvedBy', r.approver.name))}</div>` : ''}
     </div>
   `;
   }).join('');
@@ -1187,6 +1188,10 @@ function statusChipClass(status) {
   return 'chip-low';
 }
 function nextStatusButton(r) {
+  // RLS refuses this anyway for a requester-role account (see
+  // set_request_status()/schema.sql) — hidden here too so the button never
+  // shows something they can't actually do.
+  if (currentProfile?.role === 'requester') return '';
   const next = { pending: 'preparing', preparing: 'ready' }[r.status];
   if (!next) return '';
   return `<button class="btn btn-outline btn-sm" data-advance="${r.id}" data-to="${next}">${icon('arrowRight', 14)}<span>${t('btnMarkStatus', statusLabel(next))}</span></button>`;
@@ -1195,13 +1200,22 @@ function nextStatusButton(r) {
 document.getElementById('btn-new-request').addEventListener('click', openNewRequestSheet);
 
 function openNewRequestSheet() {
+  // A Requester's own identity is never editable here — the RPC always uses
+  // their profile regardless of what's sent, so there's no point showing a
+  // field that can't change anything. Staff/Admin still get it, now
+  // optional: filled in, it names who this is actually for (a walk-in who
+  // called it in); left blank, it submits under their own name.
+  const showRequesterField = currentProfile?.role !== 'requester';
   Sheet.open(t('newRequestTitle'), `
     <div id="nr-error"></div>
     <form id="form-new-request">
-      <div class="field">
-        <label for="nr-requester">${t('fieldRequesterName')}</label>
-        <input type="text" id="nr-requester" required>
-      </div>
+      ${showRequesterField ? `
+        <div class="field">
+          <label for="nr-requester">${t('fieldRequesterName')}</label>
+          <input type="text" id="nr-requester">
+          <p class="field-hint">${t('fieldRequesterNameOptionalHint')}</p>
+        </div>
+      ` : ''}
       <div class="field">
         <label for="nr-sku">${t('fieldItem')}</label>
         <select id="nr-sku" required>${activeSkusOptionsCache()}</select>
@@ -1229,7 +1243,7 @@ function openNewRequestSheet() {
     errEl.innerHTML = '';
     try {
       await DB.createRequest({
-        requesterName: document.getElementById('nr-requester').value.trim(),
+        requesterName: showRequesterField ? document.getElementById('nr-requester').value.trim() : '',
         skuId: document.getElementById('nr-sku').value,
         qty: parseFloat(document.getElementById('nr-qty').value),
         neededBy: document.getElementById('nr-needed').value,
@@ -1379,20 +1393,252 @@ function tableHtml(headers, rows) {
 }
 
 // ============================================================================
+// MANAGE STAFF (admin-only — user_profiles CRUD). Mirrors the Manage Items
+// list+edit-sheet pattern above (openManageItemsSheet/miRowHtml/etc) — same
+// shape, simpler data. Creating the underlying login is still a manual step
+// in the Supabase dashboard (see the field hint below); this only manages
+// the profile — name/role/department/active — layered on top of that.
+// ============================================================================
+let msAllStaff = [];
+let msEditingId = null;
+
+document.getElementById('btn-manage-staff').addEventListener('click', openManageStaffSheet);
+
+const ROLE_LABELS = { requester: () => t('roleRequester'), staff: () => t('roleStaff'), admin: () => t('roleAdmin') };
+function roleLabel(role) {
+  return (ROLE_LABELS[role] || (() => role))();
+}
+
+function openManageStaffSheet() {
+  msEditingId = null;
+  Sheet.open(t('manageStaffTitle'), manageStaffSheetHtml());
+  wireManageStaffForm();
+  loadManageStaffList();
+}
+
+function manageStaffSheetHtml() {
+  return `
+    <div id="ms-error"></div>
+    <form id="form-manage-staff">
+      <div class="field">
+        <label for="ms-email">${t('fieldStaffEmail')}</label>
+        <input type="email" id="ms-email" required>
+        <p class="field-hint">${t('fieldStaffEmailHint')}</p>
+      </div>
+      <div class="field">
+        <label for="ms-name">${t('fieldStaffName')}</label>
+        <input type="text" id="ms-name" required>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label for="ms-role">${t('fieldStaffRole')}</label>
+          <select id="ms-role" required>
+            <option value="requester">${t('roleRequester')}</option>
+            <option value="staff">${t('roleStaff')}</option>
+            <option value="admin">${t('roleAdmin')}</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="ms-department">${t('fieldStaffDepartment')}</label>
+          <input type="text" id="ms-department">
+        </div>
+      </div>
+      <div class="card-row">
+        <button type="button" class="btn btn-ghost" id="ms-cancel-edit" hidden>${icon('xCircle', 16)}<span>${t('cancel')}</span></button>
+        <button type="submit" class="btn btn-primary btn-block" id="ms-submit">${msSubmitButtonInner('add')}</button>
+      </div>
+    </form>
+
+    <div class="section-head"><h2>${t('activeStaff')}</h2></div>
+    <div id="ms-active-list" class="card-list"></div>
+    <div class="section-head"><h2>${t('inactiveStaff')}</h2></div>
+    <div id="ms-inactive-list" class="card-list"></div>
+  `;
+}
+
+function msSubmitButtonInner(mode) {
+  return mode === 'edit'
+    ? `${icon('checkCircle', 16)}<span>${t('btnSaveStaff')}</span>`
+    : `${icon('plusCircle', 16)}<span>${t('btnAddStaff')}</span>`;
+}
+
+function wireManageStaffForm() {
+  document.getElementById('form-manage-staff').addEventListener('submit', onManageStaffSubmit);
+  document.getElementById('ms-cancel-edit').addEventListener('click', () => resetManageStaffForm());
+}
+
+function resetManageStaffForm() {
+  msEditingId = null;
+  const form = document.getElementById('form-manage-staff');
+  form.reset();
+  document.getElementById('ms-email').disabled = false;
+  document.getElementById('ms-submit').innerHTML = msSubmitButtonInner('add');
+  document.getElementById('ms-cancel-edit').hidden = true;
+}
+
+async function onManageStaffSubmit(e) {
+  e.preventDefault();
+  const errEl = document.getElementById('ms-error');
+  errEl.innerHTML = '';
+  const btn = document.getElementById('ms-submit');
+  btn.disabled = true;
+  try {
+    let id = msEditingId;
+    if (!id) {
+      const email = document.getElementById('ms-email').value.trim();
+      id = await DB.findAuthUserId(email);
+      if (!id) {
+        errEl.innerHTML = `<div class="form-error">${escapeHtml(t('errorNoAuthUser'))}</div>`;
+        return;
+      }
+    }
+    await DB.upsertProfile({
+      id,
+      name: document.getElementById('ms-name').value.trim(),
+      role: document.getElementById('ms-role').value,
+      department: document.getElementById('ms-department').value.trim(),
+      isActive: true,
+    });
+    toast(t('toastStaffSaved'), 'success');
+    resetManageStaffForm();
+    await loadManageStaffList();
+  } catch (err) {
+    errEl.innerHTML = `<div class="form-error">${escapeHtml(err.message || 'Could not save')}</div>`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function loadManageStaffList() {
+  try {
+    msAllStaff = await DB.listStaff();
+    renderManageStaffLists();
+  } catch (err) {
+    toast(err.message || 'Could not load staff', 'error');
+  }
+}
+
+function renderManageStaffLists() {
+  const active = msAllStaff.filter((s) => s.is_active);
+  const inactive = msAllStaff.filter((s) => !s.is_active);
+  document.getElementById('ms-active-list').innerHTML = active.length ? active.map(msRowHtml).join('') : `<div class="empty"><p>${t('emptyGeneric')}</p></div>`;
+  document.getElementById('ms-inactive-list').innerHTML = inactive.length ? inactive.map(msRowHtml).join('') : `<div class="empty"><p>${t('emptyGeneric')}</p></div>`;
+
+  document.querySelectorAll('[data-ms-edit]').forEach((btn) => {
+    btn.addEventListener('click', () => startEditStaff(btn.dataset.msEdit));
+  });
+  document.querySelectorAll('[data-ms-toggle]').forEach((btn) => {
+    btn.addEventListener('click', () => toggleStaffActive(btn.dataset.msToggle, btn.dataset.toActive === 'true'));
+  });
+}
+
+function msRowHtml(s) {
+  return `
+    <div class="card">
+      <div class="card-row">
+        <div>
+          <div class="card-title">${escapeHtml(s.name)}</div>
+          <div class="card-meta">${escapeHtml(roleLabel(s.role))}${s.department ? ' · ' + escapeHtml(s.department) : ''}</div>
+        </div>
+      </div>
+      <div class="card-row" style="margin-top:var(--s3)">
+        <button class="btn btn-outline btn-sm" data-ms-edit="${s.id}">${icon('pencil', 14)}<span>${t('btnEdit')}</span></button>
+        ${s.is_active
+          ? `<button class="btn btn-ghost btn-sm" data-ms-toggle="${s.id}" data-to-active="false">${icon('xCircle', 14)}<span>${t('btnDeactivate')}</span></button>`
+          : `<button class="btn btn-ghost btn-sm" data-ms-toggle="${s.id}" data-to-active="true">${icon('checkCircle', 14)}<span>${t('btnActivate')}</span></button>`}
+      </div>
+    </div>
+  `;
+}
+
+function startEditStaff(id) {
+  const s = msAllStaff.find((x) => x.id === id);
+  if (!s) return;
+  msEditingId = id;
+  const emailEl = document.getElementById('ms-email');
+  emailEl.value = '';
+  emailEl.placeholder = t('fieldStaffEmail');
+  emailEl.disabled = true;
+  document.getElementById('ms-name').value = s.name;
+  document.getElementById('ms-role').value = s.role;
+  document.getElementById('ms-department').value = s.department || '';
+  document.getElementById('ms-submit').innerHTML = msSubmitButtonInner('edit');
+  document.getElementById('ms-cancel-edit').hidden = false;
+  document.getElementById('sheet-body').scrollTop = 0;
+}
+
+async function toggleStaffActive(id, toActive) {
+  const s = msAllStaff.find((x) => x.id === id);
+  if (!s) return;
+  try {
+    await DB.upsertProfile({ id, name: s.name, role: s.role, department: s.department, isActive: toActive });
+    toast(t('toastStaffSaved'), 'success');
+    await loadManageStaffList();
+  } catch (err) {
+    toast(err.message || 'Could not update', 'error');
+  }
+}
+
+// ============================================================================
 // AUTH GATE — admin.html only. Nothing under DB.* will actually return data
 // for an unauthenticated caller (Row Level Security enforces that at the
 // database itself, see schema.sql), so this gate is about presenting the
 // right screen, not the real security boundary.
 // ============================================================================
 let appBooted = false;
+// The signed-in person's own profile (name/role/department) — fetched once
+// per session right after login (see DB.getMyProfile()) and used to gate
+// the UI by role. Never used for anything security-sensitive on its own;
+// Row Level Security (schema.sql) is the real boundary, this just decides
+// what to show.
+let currentProfile = null;
 
 async function initApp() {
   if (appBooted) return;
   appBooted = true;
   try {
+    currentProfile = await DB.getMyProfile();
+  } catch (_) {
+    currentProfile = null;
+  }
+  if (!currentProfile) {
+    // Signed in through Supabase Auth, but no user_profiles row — RLS
+    // would refuse almost everything, so there's nothing useful to show.
+    appBooted = false;
+    toast(t('errorNoProfile'), 'error');
+    await Auth.signOut();
+    await refreshAuthUi();
+    return;
+  }
+  applyRoleGate(currentProfile.role);
+  try {
     activeSkus = await DB.listSkus({ activeOnly: true });
-  } catch (_) { /* stock view will surface the error */ }
-  showView('stock');
+  } catch (_) { /* stock/requests view will surface the error */ }
+  showView(currentProfile.role === 'requester' ? 'requests' : 'stock');
+}
+
+// Client-side only — a Requester account genuinely can't reach
+// staff/admin-only data even if this were bypassed, since the matching
+// tables are gated by is_staff_or_admin() in schema.sql. This is purely
+// about not showing screens/controls a role can't use.
+function applyRoleGate(role) {
+  const visibleTabs = {
+    requester: ['requests'],
+    staff: ['stock', 'receive', 'issue', 'requests'],
+    admin: ['stock', 'receive', 'issue', 'requests', 'reports'],
+  }[role] || [];
+  document.querySelectorAll('.tabbar button[data-view]').forEach((btn) => {
+    btn.hidden = !visibleTabs.includes(btn.dataset.view);
+  });
+
+  document.getElementById('btn-manage-items').hidden = role !== 'admin';
+  document.getElementById('btn-manage-staff').hidden = role !== 'admin';
+
+  const requestsTabLabel = document.querySelector('.tabbar button[data-view="requests"] span[data-i18n]');
+  if (requestsTabLabel) {
+    requestsTabLabel.dataset.i18n = role === 'requester' ? 'tabMyRequests' : 'tabRequests';
+    requestsTabLabel.textContent = t(requestsTabLabel.dataset.i18n);
+  }
 }
 
 function showLoginScreen() {
@@ -1420,10 +1666,11 @@ document.getElementById('form-admin-login').addEventListener('submit', async (e)
   const errEl = document.getElementById('login-error');
   errEl.innerHTML = '';
   const btn = document.getElementById('login-submit');
+  const email = document.getElementById('login-email').value.trim();
   const password = document.getElementById('login-password').value;
   btn.disabled = true;
   try {
-    await Auth.signIn(password);
+    await Auth.signIn(email, password);
     document.getElementById('login-password').value = '';
     await refreshAuthUi();
   } catch (err) {
@@ -1436,6 +1683,7 @@ document.getElementById('form-admin-login').addEventListener('submit', async (e)
 document.getElementById('btn-logout').addEventListener('click', async () => {
   await Auth.signOut();
   appBooted = false;
+  currentProfile = null;
   await refreshAuthUi();
 });
 

@@ -6,12 +6,40 @@
 <title>Warehouse Inventory</title>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Oswald:wght@500&display=swap">
 
-<link rel="stylesheet" href="css/tokens.css?v=20260909q">
-<link rel="stylesheet" href="css/app.css?v=20260909q">
+<link rel="stylesheet" href="css/tokens.css?v=20260909t">
+<link rel="stylesheet" href="css/app.css?v=20260909t">
 </head>
 <body class="hub-page">
+
+<div class="cine-backdrop" aria-hidden="true">
+  <div class="cine-spotlight"></div>
+  <svg class="cine-racking" viewBox="0 0 1200 260" preserveAspectRatio="xMidYMax slice">
+    <defs>
+      <linearGradient id="cineFade" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="currentColor" stop-opacity="0"/>
+        <stop offset="100%" stop-color="currentColor" stop-opacity=".4"/>
+      </linearGradient>
+    </defs>
+    <g stroke="url(#cineFade)" stroke-width="3">
+      <line x1="60" y1="260" x2="60" y2="20"/>
+      <line x1="180" y1="260" x2="180" y2="60"/>
+      <line x1="300" y1="260" x2="300" y2="10"/>
+      <line x1="900" y1="260" x2="900" y2="10"/>
+      <line x1="1020" y1="260" x2="1020" y2="60"/>
+      <line x1="1140" y1="260" x2="1140" y2="20"/>
+    </g>
+    <g stroke="url(#cineFade)" stroke-width="2">
+      <line x1="20" y1="90" x2="340" y2="90"/>
+      <line x1="20" y1="150" x2="340" y2="150"/>
+      <line x1="20" y1="210" x2="340" y2="210"/>
+      <line x1="860" y1="90" x2="1180" y2="90"/>
+      <line x1="860" y1="150" x2="1180" y2="150"/>
+      <line x1="860" y1="210" x2="1180" y2="210"/>
+    </g>
+  </svg>
+</div>
 
 <div class="app" style="max-width:720px">
 
@@ -27,6 +55,7 @@
   </header>
 
   <main>
+    <p class="cine-tag">Warehouse Operations</p>
     <p class="eyebrow" data-i18n="landingEyebrow">Receiving · Requisition</p>
 
     <div class="hub-grid">
@@ -48,10 +77,10 @@
   </main>
 </div>
 
-<div class="app-version no-print">v20260909q</div>
+<div class="app-version no-print">v20260909t</div>
 
-<script src="js/i18n.js?v=20260909q"></script>
-<script src="js/icons.js?v=20260909q"></script>
+<script src="js/i18n.js?v=20260909t"></script>
+<script src="js/icons.js?v=20260909t"></script>
 <script>
   document.documentElement.lang = I18n.current;
   I18n.applyStatic();

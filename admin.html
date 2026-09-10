@@ -6,10 +6,10 @@
 <title>Warehouse Inventory — Admin</title>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Oswald:wght@500&display=swap">
 
-<link rel="stylesheet" href="css/tokens.css?v=20260909q">
-<link rel="stylesheet" href="css/app.css?v=20260909q">
+<link rel="stylesheet" href="css/tokens.css?v=20260909t">
+<link rel="stylesheet" href="css/app.css?v=20260909t">
 </head>
 <body>
 
@@ -17,7 +17,35 @@
 <!-- Shown until Auth.getSession() resolves to a signed-in user; RLS enforces
      the real boundary (see schema.sql) — this is the door, not the lock. -->
 <div class="login-screen" id="login-screen">
+  <div class="cine-backdrop" aria-hidden="true">
+    <div class="cine-spotlight"></div>
+    <svg class="cine-racking" viewBox="0 0 1200 260" preserveAspectRatio="xMidYMax slice">
+      <defs>
+        <linearGradient id="cineFadeLogin" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="currentColor" stop-opacity="0"/>
+          <stop offset="100%" stop-color="currentColor" stop-opacity=".4"/>
+        </linearGradient>
+      </defs>
+      <g stroke="url(#cineFadeLogin)" stroke-width="3">
+        <line x1="60" y1="260" x2="60" y2="20"/>
+        <line x1="180" y1="260" x2="180" y2="60"/>
+        <line x1="300" y1="260" x2="300" y2="10"/>
+        <line x1="900" y1="260" x2="900" y2="10"/>
+        <line x1="1020" y1="260" x2="1020" y2="60"/>
+        <line x1="1140" y1="260" x2="1140" y2="20"/>
+      </g>
+      <g stroke="url(#cineFadeLogin)" stroke-width="2">
+        <line x1="20" y1="90" x2="340" y2="90"/>
+        <line x1="20" y1="150" x2="340" y2="150"/>
+        <line x1="20" y1="210" x2="340" y2="210"/>
+        <line x1="860" y1="90" x2="1180" y2="90"/>
+        <line x1="860" y1="150" x2="1180" y2="150"/>
+        <line x1="860" y1="210" x2="1180" y2="210"/>
+      </g>
+    </svg>
+  </div>
   <div class="login-card">
+    <p class="cine-tag" style="text-align:center">Secure Entry</p>
     <div class="login-brand">
       <img class="header-logo" src="img/logo-property-office.png" alt="">
       <div class="header-title" data-i18n="appTitle">Warehouse</div>
@@ -26,8 +54,12 @@
     <div id="login-error"></div>
     <form id="form-admin-login">
       <div class="field">
+        <label for="login-email" data-i18n="fieldEmail">Email</label>
+        <input type="email" id="login-email" required autofocus autocomplete="username">
+      </div>
+      <div class="field">
         <label for="login-password" data-i18n="fieldPassword">Password</label>
-        <input type="password" id="login-password" required autofocus>
+        <input type="password" id="login-password" required autocomplete="current-password">
       </div>
       <button class="btn btn-primary btn-block" type="submit" id="login-submit" data-icon="checkCircle"><span data-i18n="btnLogin">Log in</span></button>
     </form>
@@ -46,6 +78,7 @@
       </div>
     </div>
     <div class="header-actions">
+      <button class="btn btn-ghost btn-sm" id="btn-manage-staff" data-icon="users" aria-label="Manage staff" hidden></button>
       <button class="btn btn-ghost btn-sm" id="lang-toggle" data-icon="globe" aria-label="Switch language"><span id="lang-toggle-label">EN</span></button>
       <button class="btn btn-ghost btn-sm" id="btn-refresh" data-icon="refresh" aria-label="Refresh"><span data-i18n="refresh">Refresh</span></button>
       <button class="btn btn-ghost btn-sm" id="btn-logout" data-icon="xCircle" aria-label="Log out"><span data-i18n="btnLogout">Log out</span></button>
@@ -275,18 +308,18 @@
      styling that doesn't apply here). -->
 <div class="admin-print-sheet print-sticker-grid" id="admin-print-sheet"></div>
 
-<div class="app-version no-print">v20260909q</div>
+<div class="app-version no-print">v20260909t</div>
 
 <!-- Third-party: Supabase client, QR generation, QR scanning -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.js"></script>
 
-<script src="js/config.js?v=20260909q"></script>
-<script src="js/db.js?v=20260909q"></script>
-<script src="js/qr.js?v=20260909q"></script>
-<script src="js/i18n.js?v=20260909q"></script>
-<script src="js/icons.js?v=20260909q"></script>
-<script src="js/app.js?v=20260909q"></script>
+<script src="js/config.js?v=20260909t"></script>
+<script src="js/db.js?v=20260909t"></script>
+<script src="js/qr.js?v=20260909t"></script>
+<script src="js/i18n.js?v=20260909t"></script>
+<script src="js/icons.js?v=20260909t"></script>
+<script src="js/app.js?v=20260909t"></script>
 </body>
 </html>

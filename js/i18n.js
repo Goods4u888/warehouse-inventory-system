@@ -50,6 +50,7 @@ const I18N = {
     stickerReady: 'Sticker ready to print',
     btnPrintSticker: 'Print sticker',
     fieldCopies: 'Copies',
+    fieldRequesterNameOptionalHint: 'Leave blank to submit as yourself',
     receiveConfirmLine: (qty, uom, total) => `+${qty} ${uom} recorded. On hand now: ${total}.`,
     toastStockReceived: (qty, uom, code) => `+${qty} ${uom} received for ${code}`,
 
@@ -156,11 +157,36 @@ const I18N = {
 
     // Admin login
     adminLoginTitle: 'Staff login',
+    fieldEmail: 'Email',
     fieldPassword: 'Password',
     btnLogin: 'Log in',
     btnLogout: 'Log out',
-    errorLoginFailed: 'Incorrect password',
+    errorLoginFailed: 'Incorrect email or password',
     loggingIn: 'Logging in…',
+    errorNoProfile: 'Your account has no profile yet — ask an admin to add you in Manage Staff.',
+
+    // Roles (user_profiles.role)
+    roleRequester: 'Requester',
+    roleStaff: 'Staff',
+    roleAdmin: 'Admin',
+    tabMyRequests: 'My Requests',
+    myRequestsTitle: 'My Requests',
+
+    // Manage Staff (admin-only)
+    manageStaff: 'Manage staff',
+    manageStaffTitle: 'Manage staff',
+    fieldStaffEmail: 'Email',
+    fieldStaffEmailHint: 'Must already exist as a login — create it first in the Supabase dashboard (Authentication → Users → Add user).',
+    fieldStaffName: 'Name',
+    fieldStaffRole: 'Role',
+    fieldStaffDepartment: 'Department (optional)',
+    btnAddStaff: 'Add person',
+    btnSaveStaff: 'Save changes',
+    toastStaffSaved: 'Saved',
+    errorNoAuthUser: 'No login found for that email — create it in the Supabase dashboard first.',
+    activeStaff: 'Active',
+    inactiveStaff: 'Deactivated',
+    approvedBy: (name) => `Approved by ${name}`,
 
     // Public request form
     requestFormTitle: 'Request form',
@@ -258,6 +284,7 @@ const I18N = {
     stickerReady: 'สติกเกอร์พร้อมพิมพ์',
     btnPrintSticker: 'พิมพ์สติกเกอร์',
     fieldCopies: 'จำนวนที่พิมพ์',
+    fieldRequesterNameOptionalHint: 'เว้นว่างไว้เพื่อส่งในนามของคุณเอง',
     receiveConfirmLine: (qty, uom, total) => `บันทึกรับเข้า +${qty} ${uom} แล้ว คงเหลือตอนนี้: ${total}`,
     toastStockReceived: (qty, uom, code) => `รับเข้า +${qty} ${uom} สำหรับ ${code}`,
 
@@ -364,11 +391,36 @@ const I18N = {
 
     // Admin login
     adminLoginTitle: 'เข้าสู่ระบบเจ้าหน้าที่',
+    fieldEmail: 'อีเมล',
     fieldPassword: 'รหัสผ่าน',
     btnLogin: 'เข้าสู่ระบบ',
     btnLogout: 'ออกจากระบบ',
-    errorLoginFailed: 'รหัสผ่านไม่ถูกต้อง',
+    errorLoginFailed: 'อีเมลหรือรหัสผ่านไม่ถูกต้อง',
     loggingIn: 'กำลังเข้าสู่ระบบ…',
+    errorNoProfile: 'บัญชีนี้ยังไม่มีโปรไฟล์ — กรุณาให้ผู้ดูแลระบบเพิ่มชื่อคุณในหน้าจัดการบัญชีผู้ใช้',
+
+    // Roles (user_profiles.role)
+    roleRequester: 'ผู้ขอเบิก',
+    roleStaff: 'เจ้าหน้าที่คลัง',
+    roleAdmin: 'ผู้ดูแลระบบ',
+    tabMyRequests: 'คำขอของฉัน',
+    myRequestsTitle: 'คำขอของฉัน',
+
+    // Manage Staff (admin-only)
+    manageStaff: 'จัดการบัญชีผู้ใช้',
+    manageStaffTitle: 'จัดการบัญชีผู้ใช้',
+    fieldStaffEmail: 'อีเมล',
+    fieldStaffEmailHint: 'ต้องมีบัญชีเข้าสู่ระบบอยู่แล้ว — สร้างก่อนใน Supabase dashboard (Authentication → Users → Add user)',
+    fieldStaffName: 'ชื่อ',
+    fieldStaffRole: 'บทบาท',
+    fieldStaffDepartment: 'แผนก (ถ้ามี)',
+    btnAddStaff: 'เพิ่มบุคคล',
+    btnSaveStaff: 'บันทึกการแก้ไข',
+    toastStaffSaved: 'บันทึกแล้ว',
+    errorNoAuthUser: 'ไม่พบบัญชีเข้าสู่ระบบสำหรับอีเมลนี้ — กรุณาสร้างใน Supabase dashboard ก่อน',
+    activeStaff: 'ใช้งานอยู่',
+    inactiveStaff: 'ปิดใช้งาน',
+    approvedBy: (name) => `อนุมัติโดย ${name}`,
 
     // Public request form
     requestFormTitle: 'แบบฟอร์มขอเบิก',
