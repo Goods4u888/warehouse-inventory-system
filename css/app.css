@@ -317,8 +317,14 @@ main {
 .field-with-btn .btn { flex: 1; }
 
 /* Copies-to-print field next to every "Print sticker" button (Manage Items
-   row, Item detail, Receive/Return confirmation) — sized to sit inline with
-   a btn-sm/btn without changing that button's own width. */
+   row, Item detail, Receive/Return confirmation) — a small labeled field
+   sized to sit inline with a btn-sm/btn without changing that button's own
+   width. */
+.qty-field { display: flex; flex-direction: column; gap: 3px; flex: none; }
+.qty-field-label {
+  font-size: 9px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--ink-3); text-align: center;
+}
 .qty-mini-input {
   width: 56px; flex: none; border: 1px solid transparent; border-radius: var(--r-control);
   padding: 8px; min-height: 36px; font-size: var(--t-micro); font-family: var(--mono);
@@ -464,16 +470,18 @@ td.num, th.num { text-align: right; font-family: var(--mono); }
   .header, .tabbar, .btn, .toast, .no-print, .login-screen, .scrim { display: none !important; }
   body { background: #fff; }
   main { padding: 0; }
-  /* admin.html's 5 tabs are plain on-screen content — none of them are
-     meant to print as-is. Without this, whichever tab happens to be active
-     (e.g. the full Stock list) prints ahead of the actual print-only
-     content below (.admin-print-sheet), on top of it, as its own extra
-     pages. Named by id rather than their shared ".view" class because
-     request.html reuses that same class for #view-confirm, which DOES
-     need to print (it's what makes .print-sheet visible below). */
-  #view-stock, #view-receive, #view-issue, #view-requests, #view-reports {
-    display: none !important;
-  }
+  /* admin.html's whole app shell — id="app-shell" is unique to that page;
+     request.html's own .app div carries no id, and still needs to print
+     .print-sheet nested inside it, so this can't just target ".app". None
+     of admin.html's on-screen content (whichever tab happens to be active,
+     e.g. the full Stock list) is meant to print — only the print-only
+     containers that follow it in the DOM (.admin-print-sheet). Hiding the
+     shell outright, rather than trying to zero out its box with
+     min-height:0 (which left it laying claim to a full blank page above
+     the actual print content — reported as "page 1 is blank, stickers
+     start on page 2"), is the only way guaranteed to leave no residual
+     height behind, regardless of what's nested inside it. */
+  #app-shell { display: none !important; }
   #print-area {
     /* On-screen confirmation card is a digital summary; .print-sheet below
        is what actually goes on paper, so the card doesn't print at all. */
@@ -482,21 +490,26 @@ td.num, th.num { text-align: right; font-family: var(--mono); }
   .confirm-code { background: #fff !important; color: #111 !important; border: 1px solid #ccc; }
   .print-sheet { display: block; color: #111; }
 
+  /* flex-wrap, not CSS Grid — Chrome's print engine has a long-standing bug
+     where a grid container doesn't reliably fragment starting at the very
+     top of the first page (it often pushes the whole grid to page 2 even
+     with zero space above it), which is exactly the "blank page 1" report
+     this replaced. Flexbox wrapping has always fragmented across print
+     pages correctly. */
   .admin-print-sheet.print-sticker-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    display: flex;
+    flex-wrap: wrap;
     gap: 6mm;
     padding: 8mm;
     color: #111;
   }
-  /* Each sticker fills its grid cell rather than sitting at its natural
-     "fit-content" width (the on-screen/single-print sizing) — otherwise a
-     short SKU name leaves a lot of dead space between cut lines. The
-     dashed border doubles as the cut guide. break-inside/page-break-inside
-     stop a sticker from being sliced across two pages when the grid runs
-     long. */
+  /* Two per row: each sticker is half the row width minus its share of the
+     one gap between them — otherwise a short SKU name would leave a lot of
+     dead space between cut lines. The dashed border doubles as the cut
+     guide. break-inside/page-break-inside stop a sticker from being sliced
+     across two pages when the sheet runs long. */
   .print-sticker-grid .sticker {
-    width: 100%; box-sizing: border-box;
+    width: calc(50% - 3mm); box-sizing: border-box;
     border: 1px dashed #999;
     break-inside: avoid; page-break-inside: avoid;
   }

@@ -252,7 +252,10 @@ function openItemDetailSheet(row) {
       <button class="btn btn-outline" id="idet-btn-receive" data-icon="package"><span>${t('scanActionReceive')}</span></button>
     </div>
     <div class="field-with-btn" style="margin-top:var(--s2)">
-      <input type="number" class="qty-mini-input" id="idet-print-qty" min="1" max="${STICKERS_PER_SHEET_MAX}" value="${STICKERS_PER_SHEET}" aria-label="${t('fieldCopies')}">
+      <div class="qty-field">
+        <label class="qty-field-label" for="idet-print-qty">${t('fieldCopies')}</label>
+        <input type="number" class="qty-mini-input" id="idet-print-qty" min="1" max="${STICKERS_PER_SHEET_MAX}" value="${STICKERS_PER_SHEET}">
+      </div>
       <button class="btn btn-outline" id="idet-btn-print">${icon('printer', 16)}<span>${t('btnPrintSticker')}</span></button>
     </div>
   `);
@@ -602,7 +605,10 @@ function miRowHtml(s) {
       </div>
       <div class="card-row" style="margin-top:var(--s3);flex-wrap:wrap">
         <button class="btn btn-outline btn-sm" data-mi-edit="${s.id}">${icon('pencil', 14)}<span>${t('btnEdit')}</span></button>
-        <input type="number" class="qty-mini-input" id="mi-print-qty-${s.id}" min="1" max="${STICKERS_PER_SHEET_MAX}" value="${STICKERS_PER_SHEET}" aria-label="${t('fieldCopies')}">
+        <div class="qty-field">
+          <label class="qty-field-label" for="mi-print-qty-${s.id}">${t('fieldCopies')}</label>
+          <input type="number" class="qty-mini-input" id="mi-print-qty-${s.id}" min="1" max="${STICKERS_PER_SHEET_MAX}" value="${STICKERS_PER_SHEET}">
+        </div>
         <button class="btn btn-outline btn-sm" data-mi-print="${s.id}">${icon('printer', 14)}<span>${t('btnPrintSticker')}</span></button>
         ${s.is_active
           ? `<button class="btn btn-ghost btn-sm" data-mi-toggle="${s.id}" data-to-active="false">${icon('xCircle', 14)}<span>${t('btnDeactivate')}</span></button>`
@@ -763,7 +769,10 @@ function renderReceiveResult(sku, qty, uom) {
       <p class="field-hint">${t('receiveConfirmLine', fmtQty(qty), escapeHtml(uom), fmtQty(sku.qty_on_hand))}</p>
       ${QR.stickerHtml({ skuCode: sku.sku_code, skuName: sku.name })}
       <div class="field-with-btn" style="margin-top:var(--s4)">
-        <input type="number" class="qty-mini-input" id="rc-print-qty" min="1" max="${STICKERS_PER_SHEET_MAX}" value="${STICKERS_PER_SHEET}" aria-label="${t('fieldCopies')}">
+        <div class="qty-field">
+          <label class="qty-field-label" for="rc-print-qty">${t('fieldCopies')}</label>
+          <input type="number" class="qty-mini-input" id="rc-print-qty" min="1" max="${STICKERS_PER_SHEET_MAX}" value="${STICKERS_PER_SHEET}">
+        </div>
         <button class="btn btn-outline" id="btn-print-sticker">${icon('printer', 16)}<span>${t('btnPrintSticker')}</span></button>
       </div>
     </div>`;
@@ -854,7 +863,10 @@ function renderReturnResult(sku, qty, uom) {
       <p class="field-hint">${t('returnConfirmLine', fmtQty(qty), escapeHtml(uom), fmtQty(sku.qty_on_hand))}</p>
       ${QR.stickerHtml({ skuCode: sku.sku_code, skuName: sku.name })}
       <div class="field-with-btn" style="margin-top:var(--s4)">
-        <input type="number" class="qty-mini-input" id="rt-print-qty" min="1" max="${STICKERS_PER_SHEET_MAX}" value="${STICKERS_PER_SHEET}" aria-label="${t('fieldCopies')}">
+        <div class="qty-field">
+          <label class="qty-field-label" for="rt-print-qty">${t('fieldCopies')}</label>
+          <input type="number" class="qty-mini-input" id="rt-print-qty" min="1" max="${STICKERS_PER_SHEET_MAX}" value="${STICKERS_PER_SHEET}">
+        </div>
         <button class="btn btn-outline" id="btn-print-return-sticker">${icon('printer', 16)}<span>${t('btnPrintSticker')}</span></button>
       </div>
     </div>`;
