@@ -341,6 +341,34 @@ create table if not exists discrepancies (
 );
 
 -- ----------------------------------------------------------------------------
+-- 5a. Transaction evidence photos — optional, uploaded from the Receive/
+--     Return/Issue forms (js/app.js). Images themselves live in Supabase
+--     Storage (bucket created below), not in Postgres — this table just
+--     links a transaction to the storage path(s) of whatever was attached
+--     to it. Populated by receive_stock()/return_stock()/issue_stock()
+--     below via insert_transaction_images(), never written directly.
+-- ----------------------------------------------------------------------------
+create table if not exists transaction_images (
+  id             uuid primary key default gen_random_uuid(),
+  transaction_id uuid not null references transactions(id) on delete cascade,
+  storage_path   text not null,
+  created_at     timestamptz not null default now()
+);
+create index if not exists transaction_images_transaction_id_idx on transaction_images(transaction_id);
+
+-- A private bucket — these can be photos of a delivery area, a damaged
+-- item, etc., so they get the same "staff and admin only" trust boundary
+-- as transactions themselves (is_staff_or_admin(), defined in section 8
+-- below but callable here since it's created earlier in this file... see
+-- note: policies referencing it are added in section 8 alongside every
+-- other RLS policy, not here, so the function exists first). Viewing a
+-- photo later happens through a short-lived signed URL (DB.getEvidenceUrls
+-- in js/db.js) — there is no permanent public link.
+insert into storage.buckets (id, name, public)
+values ('transaction-evidence', 'transaction-evidence', false)
+on conflict (id) do nothing;
+
+-- ----------------------------------------------------------------------------
 -- 5b. Lot numbering — a per-SKU, per-day running counter, so lot codes read
 --     as SKU-YYMMDD-NNN (e.g. CEM-001-260906-001, then -002 for the next
 --     batch of the same item received that same day). The upsert below is
@@ -420,10 +448,16 @@ create view movement_history as
 select
   t.id as transaction_id, t.type, t.qty, t.uom, t.performed_by, t.note, t.created_at,
   s.sku_code, s.name as sku_name,
-  r.request_code
+  r.request_code,
+  coalesce(ti.image_paths, array[]::text[]) as image_paths
 from transactions t
 join skus s on s.id = t.sku_id
 left join requests r on r.id = t.request_id
+left join lateral (
+  select array_agg(storage_path order by created_at) as image_paths
+  from transaction_images
+  where transaction_id = t.id
+) ti on true
 order by t.created_at desc;
 
 drop view if exists discrepancy_report;
@@ -442,6 +476,29 @@ order by d.created_at desc;
 -- 7. RPCs — the two writes that must be atomic
 -- ----------------------------------------------------------------------------
 
+-- Shared by receive_stock()/return_stock()/issue_stock() below — one small
+-- helper instead of repeating the same loop three times. p_image_paths is
+-- the array of Storage paths the client already uploaded to the
+-- transaction-evidence bucket before calling the RPC (see js/db.js
+-- uploadEvidenceImages) — null/empty is the normal case, since photos are
+-- optional.
+create or replace function insert_transaction_images(p_transaction_id uuid, p_image_paths text[]) returns void
+language plpgsql
+as $$
+declare
+  v_path text;
+begin
+  if p_image_paths is null then
+    return;
+  end if;
+  foreach v_path in array p_image_paths loop
+    if nullif(trim(v_path), '') is not null then
+      insert into transaction_images (transaction_id, storage_path) values (p_transaction_id, v_path);
+    end if;
+  end loop;
+end;
+$$;
+
 -- Receiving (rewritten 2026-09-08 for the one-QR-per-item model): adds
 -- straight onto the item's running total and logs a transaction — no more
 -- creating a new lot/QR per receiving event (see the "2. Lots" note above).
@@ -454,14 +511,20 @@ order by d.created_at desc;
 -- doesn't allow a function's return type to change in place.
 drop function if exists receive_stock(uuid, numeric, text, text, text);
 
+-- v3 (current): adds p_image_paths — optional evidence photos, already
+-- uploaded to Storage by the caller (see insert_transaction_images above).
+-- Now captures the transaction row via `returning` (previously discarded)
+-- since it needs the id to link images to.
 create or replace function receive_stock(
   p_sku_id uuid, p_qty numeric, p_uom text,
-  p_received_by text default null, p_supplier_ref text default null
+  p_received_by text default null, p_supplier_ref text default null,
+  p_image_paths text[] default null
 ) returns skus
 language plpgsql
 as $$
 declare
   v_sku skus;
+  v_txn transactions;
 begin
   if p_qty <= 0 then
     raise exception 'Quantity must be greater than zero';
@@ -476,7 +539,10 @@ begin
   end if;
 
   insert into transactions (type, sku_id, qty, uom, performed_by, note)
-  values ('receive', p_sku_id, p_qty, p_uom, p_received_by, p_supplier_ref);
+  values ('receive', p_sku_id, p_qty, p_uom, p_received_by, p_supplier_ref)
+  returning * into v_txn;
+
+  perform insert_transaction_images(v_txn.id, p_image_paths);
 
   return v_sku;
 end;
@@ -493,14 +559,17 @@ $$;
 -- reachable from the public form.
 drop function if exists return_stock(uuid, numeric, text, text, text);
 
+-- v2 (current): adds p_image_paths, same reasoning as receive_stock above.
 create or replace function return_stock(
   p_sku_id uuid, p_qty numeric, p_uom text,
-  p_returned_by text default null, p_note text default null
+  p_returned_by text default null, p_note text default null,
+  p_image_paths text[] default null
 ) returns skus
 language plpgsql
 as $$
 declare
   v_sku skus;
+  v_txn transactions;
 begin
   if p_qty <= 0 then
     raise exception 'Quantity must be greater than zero';
@@ -515,7 +584,10 @@ begin
   end if;
 
   insert into transactions (type, sku_id, qty, uom, performed_by, note)
-  values ('return', p_sku_id, p_qty, p_uom, p_returned_by, p_note);
+  values ('return', p_sku_id, p_qty, p_uom, p_returned_by, p_note)
+  returning * into v_txn;
+
+  perform insert_transaction_images(v_txn.id, p_image_paths);
 
   return v_sku;
 end;
@@ -531,8 +603,12 @@ $$;
 -- blocking it.
 drop function if exists issue_stock(uuid, uuid, numeric, text);
 
+-- v2 (current): adds p_image_paths, same reasoning as receive_stock above
+-- — this one already captured the transaction row (v_txn), so it's just a
+-- new param + one extra call.
 create or replace function issue_stock(
-  p_sku_id uuid, p_request_id uuid, p_actual_qty numeric, p_performed_by text default null
+  p_sku_id uuid, p_request_id uuid, p_actual_qty numeric, p_performed_by text default null,
+  p_image_paths text[] default null
 ) returns jsonb
 language plpgsql
 as $$
@@ -569,6 +645,8 @@ begin
   insert into transactions (type, sku_id, request_id, qty, uom, performed_by)
   values ('issue', p_sku_id, p_request_id, p_actual_qty, v_sku.base_uom, p_performed_by)
   returning * into v_txn;
+
+  perform insert_transaction_images(v_txn.id, p_image_paths);
 
   if p_actual_qty <> v_request.qty_requested then
     v_has_discrepancy := true;
@@ -777,18 +855,36 @@ $$;
 -- which section 8's RLS deliberately doesn't do (they only get to SELECT
 -- their own rows); running as the function owner lets this one narrow,
 -- parameter-controlled insert through without widening that policy.
+--
+-- v2 (current): p_sku_id/p_qty/p_notes -> p_items jsonb (a *list* of items,
+-- each {"sku_id": "...", "qty": n}) + p_comment — same "multiple items
+-- plus a shared comment" shape as create_public_request() above, and
+-- reuses its exact validation loop and per-item insert pattern (one row
+-- per item, all sharing one request_code; a comment-only submission with
+-- no items still writes a single row). Deliberately does NOT check current
+-- stock quantity/availability anywhere — same as before, and same as
+-- create_public_request(): a request never reserves or blocks on stock on
+-- hand, a human decides feasibility at fulfillment time.
+drop function if exists create_authenticated_request(uuid, numeric, date, text, text, text);
+
 create or replace function create_authenticated_request(
-  p_sku_id uuid, p_qty numeric, p_needed_by date default null, p_notes text default null,
+  p_items jsonb default null, p_comment text default null, p_needed_by date default null,
   p_requester_name text default null, p_department text default null
-) returns requests
+) returns setof requests
 language plpgsql
 security definer
 set search_path = public
 as $$
 declare
   v_profile user_profiles;
-  v_sku_ok boolean;
+  v_code text;
   v_row requests;
+  v_item jsonb;
+  v_sku_id uuid;
+  v_qty numeric;
+  v_sku_ok boolean;
+  v_item_count int;
+  v_notes text;
   v_name text;
   v_dept text;
   v_requester_user_id uuid;
@@ -798,13 +894,28 @@ begin
     raise exception 'No profile found for this account';
   end if;
 
-  if p_sku_id is null or p_qty is null or p_qty <= 0 then
-    raise exception 'Please choose an item and a quantity';
+  v_item_count := coalesce(jsonb_array_length(p_items), 0);
+  v_notes := nullif(trim(p_comment), '');
+
+  if v_item_count = 0 and v_notes is null then
+    raise exception 'Please select at least one item or add a comment';
   end if;
 
-  select exists(select 1 from skus where id = p_sku_id and is_active = true) into v_sku_ok;
-  if not v_sku_ok then
-    raise exception 'Selected item is not available';
+  if v_item_count > 0 then
+    for v_item in select * from jsonb_array_elements(p_items) loop
+      if v_item->>'sku_id' is null or v_item->>'qty' is null then
+        raise exception 'Please enter a quantity for each selected item';
+      end if;
+      v_sku_id := (v_item->>'sku_id')::uuid;
+      v_qty := (v_item->>'qty')::numeric;
+      if v_qty <= 0 then
+        raise exception 'Please enter a quantity for each selected item';
+      end if;
+      select exists(select 1 from skus where id = v_sku_id and is_active = true) into v_sku_ok;
+      if not v_sku_ok then
+        raise exception 'Selected item is not available';
+      end if;
+    end loop;
   end if;
 
   if v_profile.role in ('staff','admin') and nullif(trim(p_requester_name), '') is not null then
@@ -817,11 +928,25 @@ begin
     v_requester_user_id := auth.uid();
   end if;
 
-  insert into requests (request_code, requester_name, department, sku_id, qty_requested, needed_by, notes, requester_user_id)
-  values (next_request_code(), v_name, v_dept, p_sku_id, p_qty, p_needed_by, p_notes, v_requester_user_id)
-  returning * into v_row;
+  v_code := next_request_code();
 
-  return v_row;
+  if v_item_count = 0 then
+    insert into requests (request_code, requester_name, department, notes, needed_by, requester_user_id)
+    values (v_code, v_name, v_dept, v_notes, p_needed_by, v_requester_user_id)
+    returning * into v_row;
+    return next v_row;
+  else
+    for v_item in select * from jsonb_array_elements(p_items) loop
+      v_sku_id := (v_item->>'sku_id')::uuid;
+      v_qty := (v_item->>'qty')::numeric;
+      insert into requests (request_code, requester_name, department, sku_id, qty_requested, needed_by, notes, requester_user_id)
+      values (v_code, v_name, v_dept, v_sku_id, v_qty, p_needed_by, v_notes, v_requester_user_id)
+      returning * into v_row;
+      return next v_row;
+    end loop;
+  end if;
+
+  return;
 end;
 $$;
 
@@ -910,24 +1035,26 @@ $$;
 -- from just "anon" is not enough to lock an admin-only function down, since
 -- PUBLIC still covers it. Revoke PUBLIC explicitly, then grant only to the
 -- roles that should actually have it.
-revoke execute on function receive_stock(uuid, numeric, text, text, text) from public;
-revoke execute on function return_stock(uuid, numeric, text, text, text) from public;
-revoke execute on function issue_stock(uuid, uuid, numeric, text) from public;
+revoke execute on function insert_transaction_images(uuid, text[]) from public;
+revoke execute on function receive_stock(uuid, numeric, text, text, text, text[]) from public;
+revoke execute on function return_stock(uuid, numeric, text, text, text, text[]) from public;
+revoke execute on function issue_stock(uuid, uuid, numeric, text, text[]) from public;
 revoke execute on function create_sku(text, text, text, text, numeric, numeric) from public;
 revoke execute on function create_public_request(text, text, text, text, jsonb) from public;
 revoke execute on function next_request_code() from public;
-revoke execute on function create_authenticated_request(uuid, numeric, date, text, text, text) from public;
+revoke execute on function create_authenticated_request(jsonb, text, date, text, text) from public;
 revoke execute on function set_request_status(uuid, text) from public;
 revoke execute on function is_staff_or_admin() from public;
 revoke execute on function is_admin() from public;
 
-grant execute on function receive_stock(uuid, numeric, text, text, text) to authenticated;
-grant execute on function return_stock(uuid, numeric, text, text, text) to authenticated;
-grant execute on function issue_stock(uuid, uuid, numeric, text) to authenticated;
+grant execute on function insert_transaction_images(uuid, text[]) to authenticated;
+grant execute on function receive_stock(uuid, numeric, text, text, text, text[]) to authenticated;
+grant execute on function return_stock(uuid, numeric, text, text, text, text[]) to authenticated;
+grant execute on function issue_stock(uuid, uuid, numeric, text, text[]) to authenticated;
 grant execute on function create_sku(text, text, text, text, numeric, numeric) to authenticated;
 grant execute on function create_public_request(text, text, text, text, jsonb) to anon, authenticated;
 grant execute on function next_request_code() to authenticated;
-grant execute on function create_authenticated_request(uuid, numeric, date, text, text, text) to authenticated;
+grant execute on function create_authenticated_request(jsonb, text, date, text, text) to authenticated;
 grant execute on function set_request_status(uuid, text) to authenticated;
 -- Called from inside policy expressions (section 8), evaluated as the
 -- querying role — authenticated needs EXECUTE for those policies to work.
@@ -960,6 +1087,7 @@ alter table lot_sequences enable row level security;
 alter table sku_sequences enable row level security;
 alter table categories enable row level security;
 alter table departments enable row level security;
+alter table transaction_images enable row level security;
 alter table request_sequences enable row level security;
 alter table user_profiles enable row level security;
 
@@ -1032,6 +1160,23 @@ create policy "staff and admin full access - categories" on categories for all t
 drop policy if exists "staff and admin full access - departments" on departments;
 create policy "staff and admin full access - departments" on departments for all to authenticated
   using (is_staff_or_admin()) with check (is_staff_or_admin());
+
+-- transaction_images: evidence photos, written only by
+-- insert_transaction_images() (called from receive_stock/return_stock/
+-- issue_stock) — same staff/admin boundary as transactions itself.
+drop policy if exists "staff and admin full access - transaction_images" on transaction_images;
+create policy "staff and admin full access - transaction_images" on transaction_images for all to authenticated
+  using (is_staff_or_admin()) with check (is_staff_or_admin());
+
+-- transaction-evidence Storage bucket: the actual image files. storage.objects
+-- is Supabase's own table (not one of ours) but takes RLS policies the same
+-- way — scoped to this one bucket_id so it can't affect any other bucket
+-- this project might add later, reusing the same is_staff_or_admin() check
+-- as transaction_images above.
+drop policy if exists "staff and admin can manage evidence" on storage.objects;
+create policy "staff and admin can manage evidence" on storage.objects for all to authenticated
+  using (bucket_id = 'transaction-evidence' and is_staff_or_admin())
+  with check (bucket_id = 'transaction-evidence' and is_staff_or_admin());
 
 -- lots: legacy (see "2. Lots" above) — nothing writes here anymore for any
 -- role, kept staff/admin-only same as before, just via the shared helper.

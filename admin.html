@@ -8,8 +8,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap">
 
-<link rel="stylesheet" href="css/tokens.css?v=20260911f">
-<link rel="stylesheet" href="css/app.css?v=20260911f">
+<link rel="stylesheet" href="css/tokens.css?v=20260911g">
+<link rel="stylesheet" href="css/app.css?v=20260911g">
 </head>
 <body>
 
@@ -142,6 +142,11 @@
             <label for="rc-by" data-i18n="fieldReceivedBy">Received by</label>
             <input type="text" id="rc-by" data-i18n-placeholder="fieldReceivedByPh" placeholder="Staff name" required>
           </div>
+          <div class="field">
+            <label for="rc-photos" data-i18n="fieldEvidencePhotos">Photos (optional)</label>
+            <input type="file" id="rc-photos" accept="image/*" multiple>
+            <div class="evidence-thumbs" id="rc-photos-preview"></div>
+          </div>
           <button class="btn btn-primary btn-block" type="submit" id="btn-receive-submit" data-icon="qr"><span id="rc-submit-label" data-i18n="btnGenerateLot">Record delivery</span></button>
         </form>
 
@@ -175,6 +180,11 @@
           <div class="field">
             <label for="rt-by" data-i18n="fieldReturnedBy">Returned by</label>
             <input type="text" id="rt-by" data-i18n-placeholder="fieldReturnedByPh" placeholder="Staff or requester name" required>
+          </div>
+          <div class="field">
+            <label for="rt-photos" data-i18n="fieldEvidencePhotos">Photos (optional)</label>
+            <input type="file" id="rt-photos" accept="image/*" multiple>
+            <div class="evidence-thumbs" id="rt-photos-preview"></div>
           </div>
           <button class="btn btn-primary btn-block" type="submit" id="btn-return-submit" data-icon="qr"><span id="rt-submit-label" data-i18n="btnGenerateReturnLot">Record return</span></button>
         </form>
@@ -290,18 +300,18 @@
      styling that doesn't apply here). -->
 <div class="admin-print-sheet print-sticker-grid" id="admin-print-sheet"></div>
 
-<div class="app-version no-print">v20260911f</div>
+<div class="app-version no-print">v20260911g</div>
 
 <!-- Third-party: Supabase client, QR generation, QR scanning -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.js"></script>
 
-<script src="js/config.js?v=20260911f"></script>
-<script src="js/db.js?v=20260911f"></script>
-<script src="js/qr.js?v=20260911f"></script>
-<script src="js/i18n.js?v=20260911f"></script>
-<script src="js/icons.js?v=20260911f"></script>
-<script src="js/app.js?v=20260911f"></script>
+<script src="js/config.js?v=20260911g"></script>
+<script src="js/db.js?v=20260911g"></script>
+<script src="js/qr.js?v=20260911g"></script>
+<script src="js/i18n.js?v=20260911g"></script>
+<script src="js/icons.js?v=20260911g"></script>
+<script src="js/app.js?v=20260911g"></script>
 </body>
 </html>

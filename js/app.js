@@ -296,10 +296,14 @@ async function loadItemDetailMovements(skuCode) {
         <div class="idet-move-row-text">
           <span class="card-title" style="font-size:var(--t-meta)">${escapeHtml(typeLabel[m.type] || m.type)}</span>
           <span class="card-meta">${fmtDate(m.created_at)}${m.performed_by ? ` · ${escapeHtml(m.performed_by)}` : ''}</span>
+          ${m.image_paths?.length ? `<button type="button" class="btn btn-ghost btn-sm idet-move-photos" data-paths="${escapeHtml(JSON.stringify(m.image_paths))}">${icon('image', 13)}<span>${t('btnViewPhotos', m.image_paths.length)}</span></button>` : ''}
         </div>
         <span class="idet-move-qty ${qtyClass[m.type] || ''}">${sign[m.type] || ''}${fmtQty(m.qty)} ${escapeHtml(m.uom)}</span>
       </div>
     `).join('')}</div>`;
+    box.querySelectorAll('.idet-move-photos').forEach((btn) => {
+      btn.addEventListener('click', () => openEvidenceLightbox(JSON.parse(btn.getAttribute('data-paths'))));
+    });
   } catch (err) {
     if (box.isConnected) box.innerHTML = '';
   }
@@ -711,6 +715,90 @@ async function toggleSkuActive(id, toActive) {
 }
 
 // ============================================================================
+// EVIDENCE PHOTOS — shared by all four places that create a transaction
+// (Receive tab, Return tab, and the scan flow's Issue/Receive panels).
+// files are kept as plain File objects client-side (never uploaded until
+// the form actually submits) and compressed+uploaded together right before
+// the RPC call — see DB.uploadEvidenceImages in js/db.js. prefix is the
+// form's id prefix (e.g. "rc", "rt", "issue", "scan-rc"), keeping each
+// form's picker state independent.
+// ============================================================================
+const evidenceState = {};
+
+function wireEvidencePicker(prefix) {
+  evidenceState[prefix] = [];
+  const input = document.getElementById(`${prefix}-photos`);
+  if (!input) return;
+  input.addEventListener('change', (e) => {
+    evidenceState[prefix] = [...(evidenceState[prefix] || []), ...Array.from(e.target.files)];
+    e.target.value = '';
+    renderEvidenceThumbs(prefix);
+  });
+}
+
+function renderEvidenceThumbs(prefix) {
+  const box = document.getElementById(`${prefix}-photos-preview`);
+  if (!box) return;
+  const files = evidenceState[prefix] || [];
+  box.innerHTML = files.map((file, i) => `
+    <div class="evidence-thumb" data-i="${i}">
+      <img src="${URL.createObjectURL(file)}" alt="">
+      <button type="button" class="evidence-thumb-remove" data-i="${i}" aria-label="${escapeHtml(t('btnRemoveItem'))}">${icon('xCircle', 12)}</button>
+    </div>
+  `).join('');
+  box.querySelectorAll('.evidence-thumb-remove').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      evidenceState[prefix].splice(Number(btn.getAttribute('data-i')), 1);
+      renderEvidenceThumbs(prefix);
+    });
+  });
+}
+
+function resetEvidence(prefix) {
+  evidenceState[prefix] = [];
+  const box = document.getElementById(`${prefix}-photos-preview`);
+  if (box) box.innerHTML = '';
+}
+
+// Compresses+uploads whatever's currently picked for `prefix`, returning
+// the storage paths to pass into DB.receiveStock/returnStock/issueStock —
+// [] if nothing was picked (photos are optional everywhere).
+async function uploadEvidenceFor(prefix, type) {
+  const files = evidenceState[prefix] || [];
+  if (!files.length) return [];
+  return DB.uploadEvidenceImages(files, type);
+}
+
+// Viewing evidence later — Reports' movement table and the item-detail
+// "recent movements" panel both call this with a transaction's
+// image_paths (from the movement_history view). Signed URLs are generated
+// on click, not eagerly for every row, since the bucket is private.
+function openEvidenceLightbox(paths) {
+  DB.getEvidenceUrls(paths)
+    .then((items) => {
+      if (!items.length) { toast(t('errorPhotosUnavailable'), 'error'); return; }
+      let idx = 0;
+      const overlay = document.createElement('div');
+      overlay.className = 'evidence-lightbox';
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+      const render = () => {
+        overlay.innerHTML = `
+          <button type="button" class="evidence-lightbox-close" aria-label="${escapeHtml(t('cancel'))}">${icon('xCircle', 20)}</button>
+          <img src="${items[idx].signedUrl}" alt="">
+          ${items.length > 1 ? `<div class="evidence-lightbox-thumbs">${items.map((it, i) => `<img src="${it.signedUrl}" data-i="${i}" class="${i === idx ? 'active' : ''}">`).join('')}</div>` : ''}
+        `;
+        overlay.querySelector('.evidence-lightbox-close').addEventListener('click', () => overlay.remove());
+        overlay.querySelectorAll('.evidence-lightbox-thumbs img').forEach((img) => {
+          img.addEventListener('click', () => { idx = Number(img.getAttribute('data-i')); render(); });
+        });
+      };
+      render();
+      document.body.appendChild(overlay);
+    })
+    .catch((err) => toast(err.message || 'Could not load photos', 'error'));
+}
+
+// ============================================================================
 // RECEIVE
 // ============================================================================
 let activeSkus = [];
@@ -743,6 +831,8 @@ function loadReceiveForm() {
   refreshReceiveSkuOptions();
 }
 
+wireEvidencePicker('rc');
+
 document.getElementById('form-receive').addEventListener('submit', async (e) => {
   e.preventDefault();
   const errEl = document.getElementById('receive-error');
@@ -757,9 +847,11 @@ document.getElementById('form-receive').addEventListener('submit', async (e) => 
   const label = document.getElementById('rc-submit-label');
   btn.disabled = true; label.textContent = t('btnGenerating');
   try {
-    const sku = await DB.receiveStock({ skuId, qty, uom, receivedBy, supplierRef });
+    const imagePaths = await uploadEvidenceFor('rc', 'receive');
+    const sku = await DB.receiveStock({ skuId, qty, uom, receivedBy, supplierRef, imagePaths });
     renderReceiveResult(sku, qty, uom);
     e.target.reset();
+    resetEvidence('rc');
     refreshReceiveSkuOptions();
     toast(t('toastStockReceived', fmtQty(qty), escapeHtml(uom), escapeHtml(sku.sku_code)), 'success');
   } catch (err) {
@@ -841,6 +933,8 @@ function loadReturnForm() {
   refreshReturnSkuOptions();
 }
 
+wireEvidencePicker('rt');
+
 document.getElementById('form-return').addEventListener('submit', async (e) => {
   e.preventDefault();
   const errEl = document.getElementById('return-error');
@@ -855,9 +949,11 @@ document.getElementById('form-return').addEventListener('submit', async (e) => {
   const label = document.getElementById('rt-submit-label');
   btn.disabled = true; label.textContent = t('btnGenerating');
   try {
-    const sku = await DB.returnStock({ skuId, qty, uom, returnedBy, note });
+    const imagePaths = await uploadEvidenceFor('rt', 'return');
+    const sku = await DB.returnStock({ skuId, qty, uom, returnedBy, note, imagePaths });
     renderReturnResult(sku, qty, uom);
     e.target.reset();
+    resetEvidence('rt');
     refreshReturnSkuOptions();
     toast(t('toastStockReturned', fmtQty(qty), escapeHtml(uom), escapeHtml(sku.sku_code)), 'success');
   } catch (err) {
@@ -973,6 +1069,11 @@ function renderScannedItem(sku, openRequests, preferredAction = null) {
           <label for="issue-picked-up-by">${t('fieldPickedUpBy')}</label>
           <input type="text" id="issue-picked-up-by" placeholder="${escapeHtml(t('fieldReceivedByPh'))}">
         </div>
+        <div class="field">
+          <label for="issue-photos">${t('fieldEvidencePhotos')}</label>
+          <input type="file" id="issue-photos" accept="image/*" multiple>
+          <div class="evidence-thumbs" id="issue-photos-preview"></div>
+        </div>
         <div id="issue-error"></div>
         <button class="btn btn-primary btn-block" id="btn-confirm-issue">${icon('check', 16)}<span id="issue-confirm-label">${t('btnConfirmIssue')}</span></button>
       ` : `
@@ -995,6 +1096,11 @@ function renderScannedItem(sku, openRequests, preferredAction = null) {
         <label for="scan-rc-by">${t('fieldReceivedBy')}</label>
         <input type="text" id="scan-rc-by" placeholder="${escapeHtml(t('fieldReceivedByPh'))}">
       </div>
+      <div class="field">
+        <label for="scan-rc-photos">${t('fieldEvidencePhotos')}</label>
+        <input type="file" id="scan-rc-photos" accept="image/*" multiple>
+        <div class="evidence-thumbs" id="scan-rc-photos-preview"></div>
+      </div>
       <div id="scan-rc-error"></div>
       <button class="btn btn-primary btn-block" id="btn-confirm-scan-receive">${icon('plusCircle', 16)}<span id="scan-rc-confirm-label">${t('btnConfirmReceive')}</span></button>
     </div>
@@ -1003,6 +1109,8 @@ function renderScannedItem(sku, openRequests, preferredAction = null) {
   `;
 
   document.getElementById('btn-scan-again').addEventListener('click', resetScanView);
+  wireEvidencePicker('issue');
+  wireEvidencePicker('scan-rc');
 
   document.querySelectorAll('#scan-action-tabs button').forEach((b) => {
     b.addEventListener('click', () => {
@@ -1041,7 +1149,8 @@ function renderScannedItem(sku, openRequests, preferredAction = null) {
     const label = document.getElementById('issue-confirm-label');
     btn.disabled = true; label.textContent = t('btnConfirming');
     try {
-      const result = await DB.issueStock({ skuId: sku.sku_id, requestId, actualQty, performedBy });
+      const imagePaths = await uploadEvidenceFor('issue', 'issue');
+      const result = await DB.issueStock({ skuId: sku.sku_id, requestId, actualQty, performedBy, imagePaths });
       if (result.has_discrepancy) {
         toast(t('toastIssuedDiscrepancy', fmtQty(requestedQty), fmtQty(actualQty)), 'error');
       } else {
@@ -1070,7 +1179,8 @@ function renderScannedItem(sku, openRequests, preferredAction = null) {
     const label = document.getElementById('scan-rc-confirm-label');
     btn.disabled = true; label.textContent = t('btnConfirming');
     try {
-      const updated = await DB.receiveStock({ skuId: sku.sku_id, qty, uom, receivedBy, supplierRef: null });
+      const imagePaths = await uploadEvidenceFor('scan-rc', 'receive');
+      const updated = await DB.receiveStock({ skuId: sku.sku_id, qty, uom, receivedBy, supplierRef: null, imagePaths });
       toast(t('toastStockReceived', fmtQty(qty), escapeHtml(uom), escapeHtml(updated.sku_code)), 'success');
       resetScanView();
     } catch (err) {
@@ -1199,7 +1309,15 @@ function nextStatusButton(r) {
 
 document.getElementById('btn-new-request').addEventListener('click', openNewRequestSheet);
 
+// Multiple items + a comment, same search-and-cart pattern as the public
+// form (js/request.js) — ported here rather than shared, since the two
+// pages don't share a module system, using activeSkus (already loaded for
+// Stock) instead of a fresh catalog fetch and an `nr-` id prefix so it
+// can't collide with request.html's own copy of these same ids.
+let nrItems = [];
+
 function openNewRequestSheet() {
+  nrItems = [];
   // A Requester's own identity is never editable here — the RPC always uses
   // their profile regardless of what's sent, so there's no point showing a
   // field that can't change anything. Staff/Admin still get it, now
@@ -1217,37 +1335,52 @@ function openNewRequestSheet() {
         </div>
       ` : ''}
       <div class="field">
-        <label for="nr-sku">${t('fieldItem')}</label>
-        <select id="nr-sku" required>${activeSkusOptionsCache()}</select>
-      </div>
-      <div class="field-row">
-        <div class="field">
-          <label for="nr-qty">${t('fieldQty')}</label>
-          <input type="number" id="nr-qty" min="0.0001" step="any" required>
+        <label>${t('fieldSelectItems')}</label>
+        <div class="search-wrap" data-icon="search">
+          <input type="search" class="search-input" id="nr-item-search" placeholder="${escapeHtml(t('searchItemsPlaceholder'))}" autocomplete="off">
         </div>
-        <div class="field">
-          <label for="nr-needed">${t('fieldNeededBy')}</label>
-          <input type="date" id="nr-needed">
-        </div>
+        <div id="nr-item-results" class="req-item-results"></div>
+        <div id="nr-item-list" class="req-item-list"></div>
       </div>
       <div class="field">
-        <label for="nr-notes">${t('fieldNotesOptional')}</label>
-        <textarea id="nr-notes"></textarea>
+        <label for="nr-needed">${t('fieldNeededBy')}</label>
+        <input type="date" id="nr-needed">
+      </div>
+      <div class="field">
+        <label for="nr-comment">${t('fieldComment')}</label>
+        <textarea id="nr-comment" placeholder="${escapeHtml(t('fieldCommentPh'))}" style="min-height:100px"></textarea>
+        <p class="field-hint" id="nr-comment-hint">${t('fieldCommentHint')}</p>
       </div>
       <button class="btn btn-primary btn-block" type="submit">${icon('send', 16)}<span>${t('btnSubmitRequest')}</span></button>
     </form>
   `);
+  applyStaticIcons();
+  renderNrItemList();
+  document.getElementById('nr-item-search').addEventListener('input', renderNrItemResults);
   document.getElementById('form-new-request').addEventListener('submit', async (e) => {
     e.preventDefault();
     const errEl = document.getElementById('nr-error');
     errEl.innerHTML = '';
+    const comment = document.getElementById('nr-comment').value.trim();
+
+    const missingQty = nrItems.find((it) => !it.qty || Number(it.qty) <= 0);
+    if (missingQty) {
+      errEl.innerHTML = `<div class="form-error">${escapeHtml(t('errorQtyRequired'))}</div>`;
+      const qtyInput = document.querySelector(`.req-item-row-qty[data-id="${CSS.escape(missingQty.id)}"]`);
+      if (qtyInput) qtyInput.focus();
+      return;
+    }
+    if (!nrItems.length && !comment) {
+      errEl.innerHTML = `<div class="form-error">${escapeHtml(t('errorItemOrComment'))}</div>`;
+      return;
+    }
+
     try {
       await DB.createRequest({
-        requesterName: showRequesterField ? document.getElementById('nr-requester').value.trim() : '',
-        skuId: document.getElementById('nr-sku').value,
-        qty: parseFloat(document.getElementById('nr-qty').value),
+        items: nrItems.map((it) => ({ skuId: it.id, qty: Number(it.qty) })),
+        comment: comment || null,
         neededBy: document.getElementById('nr-needed').value,
-        notes: document.getElementById('nr-notes').value.trim(),
+        requesterName: showRequesterField ? document.getElementById('nr-requester').value.trim() : '',
       });
       Sheet.close();
       toast(t('toastRequestSubmitted'), 'success');
@@ -1258,8 +1391,81 @@ function openNewRequestSheet() {
   });
 }
 
-function activeSkusOptionsCache() {
-  return activeSkus.map((s) => `<option value="${s.id}">${escapeHtml(s.sku_code)} — ${escapeHtml(s.name)}</option>`).join('');
+function renderNrItemResults() {
+  const box = document.getElementById('nr-item-results');
+  const q = document.getElementById('nr-item-search').value.trim().toLowerCase();
+  if (!q) {
+    box.innerHTML = '';
+    box.hidden = true;
+    return;
+  }
+  const addedIds = new Set(nrItems.map((it) => it.id));
+  const matches = activeSkus
+    .filter((s) => !addedIds.has(s.id) && (s.name.toLowerCase().includes(q) || s.sku_code.toLowerCase().includes(q)))
+    .slice(0, 8);
+  box.hidden = false;
+  box.innerHTML = matches.length
+    ? matches.map((s) => `
+        <button type="button" class="req-item-option" data-id="${escapeHtml(s.id)}">
+          ${icon(catIcon(s.category), 16)}
+          <span class="req-item-option-text">
+            <strong>${escapeHtml(s.name)}</strong>
+            <span class="card-meta mono">${escapeHtml(s.sku_code)} · ${escapeHtml(s.base_uom)}</span>
+          </span>
+        </button>
+      `).join('')
+    : `<div class="req-item-empty">${escapeHtml(t('emptySearchResultsShort'))}</div>`;
+
+  box.querySelectorAll('.req-item-option').forEach((btn) => {
+    btn.addEventListener('click', () => addNrItem(btn.getAttribute('data-id')));
+  });
+}
+
+function addNrItem(id) {
+  if (nrItems.some((it) => it.id === id)) return;
+  const item = activeSkus.find((s) => s.id === id);
+  if (!item) return;
+  nrItems.push({ id: item.id, name: item.name, sku_code: item.sku_code, base_uom: item.base_uom, qty: '' });
+  document.getElementById('nr-item-search').value = '';
+  document.getElementById('nr-item-results').innerHTML = '';
+  document.getElementById('nr-item-results').hidden = true;
+  renderNrItemList();
+  const qtyInput = document.querySelector(`.req-item-row-qty[data-id="${CSS.escape(id)}"]`);
+  if (qtyInput) qtyInput.focus();
+}
+
+function renderNrItemList() {
+  const box = document.getElementById('nr-item-list');
+  box.innerHTML = nrItems.map((it) => `
+    <div class="req-item-row" data-id="${escapeHtml(it.id)}">
+      <span class="req-item-row-text">
+        <strong>${escapeHtml(it.name)}</strong>
+        <span class="card-meta mono">${escapeHtml(it.sku_code)} · ${escapeHtml(it.base_uom)}</span>
+      </span>
+      <input type="number" class="req-item-row-qty" data-id="${escapeHtml(it.id)}" min="0.0001" step="any"
+        value="${it.qty === '' ? '' : escapeHtml(String(it.qty))}" placeholder="${escapeHtml(t('fieldQtyNeeded'))}">
+      <button type="button" class="req-item-row-remove" data-id="${escapeHtml(it.id)}" data-icon="xCircle" aria-label="${escapeHtml(t('btnRemoveItem'))}"></button>
+    </div>
+  `).join('');
+  applyStaticIcons();
+
+  box.querySelectorAll('.req-item-row-qty').forEach((input) => {
+    input.addEventListener('input', () => {
+      const it = nrItems.find((x) => x.id === input.getAttribute('data-id'));
+      if (it) it.qty = input.value;
+    });
+  });
+  box.querySelectorAll('.req-item-row-remove').forEach((btn) => {
+    btn.addEventListener('click', () => removeNrItem(btn.getAttribute('data-id')));
+  });
+
+  const hint = document.getElementById('nr-comment-hint');
+  if (hint) hint.hidden = nrItems.length > 0;
+}
+
+function removeNrItem(id) {
+  nrItems = nrItems.filter((it) => it.id !== id);
+  renderNrItemList();
 }
 
 // ============================================================================
@@ -1354,10 +1560,16 @@ function renderReportTable(kind) {
     );
   } else if (kind === 'movement') {
     body.innerHTML = tableHtml(
-      [t('colWhen'), t('colType'), t('colSku'), t('colQty'), t('colBy'), t('colRequest')],
+      [t('colWhen'), t('colType'), t('colSku'), t('colQty'), t('colBy'), t('colRequest'), t('colEvidence')],
       rows.map((r) => [fmtDateTime(r.created_at), r.type, `${r.sku_code} — ${r.sku_name}`,
-        `<span class="num">${fmtQty(r.qty)} ${r.uom}</span>`, r.performed_by || '—', r.request_code || '—']),
+        `<span class="num">${fmtQty(r.qty)} ${r.uom}</span>`, r.performed_by || '—', r.request_code || '—',
+        r.image_paths?.length
+          ? `<button type="button" class="btn btn-ghost btn-sm report-view-photos" data-paths="${escapeHtml(JSON.stringify(r.image_paths))}">${icon('image', 13)}<span>${t('btnViewPhotos', r.image_paths.length)}</span></button>`
+          : '—']),
     );
+    body.querySelectorAll('.report-view-photos').forEach((btn) => {
+      btn.addEventListener('click', () => openEvidenceLightbox(JSON.parse(btn.getAttribute('data-paths'))));
+    });
   } else if (kind === 'discrepancy') {
     body.innerHTML = tableHtml(
       [t('colWhen'), t('colRequest'), t('colSku'), t('colRequested'), t('colActual'), t('colVariance')],

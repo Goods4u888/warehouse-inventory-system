@@ -828,6 +828,36 @@ body.hub-page .chip-neutral { background: var(--lp-amber-wash); color: var(--lp-
 .req-item-row-readonly { background: var(--paper); }
 .req-item-row-qty-display { flex: none; font-size: var(--t-meta); font-weight: 600; color: var(--ink); }
 
+/* ---- Evidence photos (Receive/Return/Issue) --------------------------------- */
+.evidence-thumbs { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s2); }
+.evidence-thumb {
+  position: relative; width: 64px; height: 64px; flex: none;
+  border: 1px solid var(--line); border-radius: var(--r-media); overflow: hidden;
+}
+.evidence-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.evidence-thumb-remove {
+  position: absolute; top: 2px; right: 2px; display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border: none; border-radius: 50%;
+  background: rgba(0,0,0,.55); color: #fff; cursor: pointer; padding: 0;
+}
+.evidence-lightbox {
+  position: fixed; inset: 0; z-index: 90; background: rgba(0,0,0,.85);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--s3);
+  padding: var(--s4);
+}
+.evidence-lightbox img { max-width: 100%; max-height: 70vh; border-radius: var(--r-media); object-fit: contain; }
+.evidence-lightbox-thumbs { display: flex; gap: var(--s2); flex-wrap: wrap; justify-content: center; }
+.evidence-lightbox-thumbs img {
+  width: 48px; height: 48px; object-fit: cover; border-radius: var(--r-control); cursor: pointer;
+  border: 2px solid transparent; opacity: .6;
+}
+.evidence-lightbox-thumbs img.active { border-color: var(--signal); opacity: 1; }
+.evidence-lightbox-close {
+  position: absolute; top: var(--s4); right: var(--s4); width: 36px; height: 36px;
+  display: inline-flex; align-items: center; justify-content: center; border-radius: 50%;
+  background: rgba(255,255,255,.12); color: #fff; border: none; cursor: pointer;
+}
+
 /* ---- Tablet and up ------------------------------------------------------------------------
    Same single codebase, more room: card lists (stock, requests, manage-items) move to a
    grid instead of one long column, and the shell widens a step at a time so the tab bar and

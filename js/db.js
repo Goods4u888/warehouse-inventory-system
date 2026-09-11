@@ -205,13 +205,14 @@ const DB = {
   },
 
   // ---- Receiving ------------------------------------------------------------
-  async receiveStock({ skuId, qty, uom, receivedBy, supplierRef }) {
+  async receiveStock({ skuId, qty, uom, receivedBy, supplierRef, imagePaths }) {
     const { data, error } = await supabaseClient.rpc('receive_stock', {
       p_sku_id: skuId,
       p_qty: qty,
       p_uom: uom,
       p_received_by: receivedBy || null,
       p_supplier_ref: supplierRef || null,
+      p_image_paths: imagePaths && imagePaths.length ? imagePaths : null,
     });
     if (error) throw error;
     return data;
@@ -222,13 +223,14 @@ const DB = {
   // straight onto the item's qty_on_hand, same as receiving — see
   // return_stock() in schema.sql. Freeform: not tied to a specific original
   // request.
-  async returnStock({ skuId, qty, uom, returnedBy, note }) {
+  async returnStock({ skuId, qty, uom, returnedBy, note, imagePaths }) {
     const { data, error } = await supabaseClient.rpc('return_stock', {
       p_sku_id: skuId,
       p_qty: qty,
       p_uom: uom,
       p_returned_by: returnedBy || null,
       p_note: note || null,
+      p_image_paths: imagePaths && imagePaths.length ? imagePaths : null,
     });
     if (error) throw error;
     return data;
@@ -256,12 +258,14 @@ const DB = {
   // is actually for" override (a walk-in who called it in); the RPC
   // ignores both for a Requester-role caller and always uses their own
   // profile instead, so nobody can submit under someone else's name.
-  async createRequest({ skuId, qty, neededBy, notes, requesterName, department }) {
+  // items is a list of { skuId, qty } (like createPublicRequest below) — a
+  // comment-only submission (no items) is also valid. Returns an array:
+  // one row per item, all sharing one request_code.
+  async createRequest({ items, comment, neededBy, requesterName, department }) {
     const { data, error } = await supabaseClient.rpc('create_authenticated_request', {
-      p_sku_id: skuId,
-      p_qty: qty,
+      p_items: items && items.length ? items.map((i) => ({ sku_id: i.skuId, qty: i.qty })) : null,
+      p_comment: comment || null,
       p_needed_by: neededBy || null,
-      p_notes: notes || null,
       p_requester_name: requesterName || null,
       p_department: department || null,
     });
@@ -300,15 +304,75 @@ const DB = {
   },
 
   // ---- Issuing (scan-to-deduct) -----------------------------------------------
-  async issueStock({ skuId, requestId, actualQty, performedBy }) {
+  async issueStock({ skuId, requestId, actualQty, performedBy, imagePaths }) {
     const { data, error } = await supabaseClient.rpc('issue_stock', {
       p_sku_id: skuId,
       p_request_id: requestId,
       p_actual_qty: actualQty,
       p_performed_by: performedBy || null,
+      p_image_paths: imagePaths && imagePaths.length ? imagePaths : null,
     });
     if (error) throw error;
     return data;
+  },
+
+  // ---- Evidence photos (Receive/Return/Issue) --------------------------------
+  // Compresses one image (resize + re-encode as JPEG) so a full-resolution
+  // phone photo doesn't turn into a multi-MB upload. Canvas-based, no
+  // library. Falls back to the original file if it isn't a decodable image
+  // (createImageBitmap throws) or compression somehow produces a larger
+  // result than the original.
+  async compressEvidenceImage(file, maxEdge = 1600, quality = 0.8) {
+    try {
+      const bitmap = await createImageBitmap(file);
+      const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
+      const w = Math.round(bitmap.width * scale);
+      const h = Math.round(bitmap.height * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext('2d').drawImage(bitmap, 0, 0, w, h);
+      bitmap.close?.();
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
+      return blob && blob.size < file.size ? blob : file;
+    } catch (_) {
+      return file;
+    }
+  },
+
+  // Compresses and uploads every file to the private transaction-evidence
+  // bucket under a fresh random path, returning the array of storage paths
+  // to pass into receiveStock/returnStock/issueStock as imagePaths. type is
+  // just a folder prefix ('receive'/'return'/'issue') for browsing the
+  // bucket by hand — not read back by anything.
+  async uploadEvidenceImages(files, type) {
+    const paths = [];
+    for (const file of files) {
+      const blob = await DB.compressEvidenceImage(file);
+      const path = `${type}/${crypto.randomUUID()}.jpg`;
+      const { error } = await supabaseClient.storage.from('transaction-evidence').upload(path, blob, {
+        contentType: 'image/jpeg',
+      });
+      if (error) throw error;
+      paths.push(path);
+    }
+    return paths;
+  },
+
+  // Private bucket, so viewing a photo later needs a short-lived signed URL
+  // rather than a permanent public link — generated on demand (when an
+  // admin actually clicks "view photos"), not eagerly for every row in a
+  // report. Returns an array of { path, signedUrl } in the same order as
+  // the input paths, skipping any that failed to sign.
+  async getEvidenceUrls(paths, expiresInSeconds = 3600) {
+    if (!paths || !paths.length) return [];
+    const { data, error } = await supabaseClient.storage
+      .from('transaction-evidence')
+      .createSignedUrls(paths, expiresInSeconds);
+    if (error) throw error;
+    return data
+      .map((d, i) => ({ path: paths[i], signedUrl: d.signedUrl }))
+      .filter((d) => d.signedUrl);
   },
 
   // ---- Reports ----------------------------------------------------------------
