@@ -865,10 +865,36 @@ $$;
 -- without this, a requester account could write directly to stock/catalog
 -- tables through the API even though the app's UI never shows them those
 -- screens.
+--
+-- security definer here is load-bearing, not incidental: this function's
+-- own query reads user_profiles, which is itself RLS-protected. Without
+-- security definer, that read would run as the calling role and re-trigger
+-- user_profiles' own SELECT policies (below) to decide what it can see —
+-- and is_admin() (used by one of those policies) would call right back
+-- into this same evaluation, which Postgres can't resolve and fails with
+-- "infinite recursion detected in policy for relation" (surfaced to the
+-- client as a bare 500). Running as the function owner — who owns the
+-- table and so bypasses its RLS entirely, same reasoning as
+-- create_public_request()'s security definer above — reads the row
+-- directly with no policy evaluation at all, breaking the cycle.
 create or replace function is_staff_or_admin() returns boolean
-language sql stable
+language sql stable security definer
+set search_path = public
 as $$
   select exists (select 1 from user_profiles where id = auth.uid() and role in ('staff','admin'));
+$$;
+
+-- Same reasoning as is_staff_or_admin() above, and used the same way by
+-- user_profiles' own "admin can ..." policies below — this is the specific
+-- function whose non-security-definer version was the actual source of the
+-- infinite-recursion error, since (unlike is_staff_or_admin(), only ever
+-- used on *other* tables) it's what user_profiles' own policies use to
+-- check the caller against user_profiles itself.
+create or replace function is_admin() returns boolean
+language sql stable security definer
+set search_path = public
+as $$
+  select exists (select 1 from user_profiles where id = auth.uid() and role = 'admin');
 $$;
 
 -- Postgres grants EXECUTE on a new function to PUBLIC by default — revoking
@@ -885,6 +911,7 @@ revoke execute on function create_authenticated_request(uuid, numeric, date, tex
 revoke execute on function set_request_status(uuid, text) from public;
 revoke execute on function find_auth_user_id(text) from public;
 revoke execute on function is_staff_or_admin() from public;
+revoke execute on function is_admin() from public;
 
 grant execute on function receive_stock(uuid, numeric, text, text, text) to authenticated;
 grant execute on function return_stock(uuid, numeric, text, text, text) to authenticated;
@@ -898,6 +925,7 @@ grant execute on function find_auth_user_id(text) to authenticated;
 -- Called from inside policy expressions (section 8), evaluated as the
 -- querying role — authenticated needs EXECUTE for those policies to work.
 grant execute on function is_staff_or_admin() to authenticated;
+grant execute on function is_admin() to authenticated;
 
 -- ----------------------------------------------------------------------------
 -- 8. Row Level Security
@@ -941,20 +969,20 @@ create policy "self can view own profile" on user_profiles for select to authent
 
 drop policy if exists "admin can view all profiles" on user_profiles;
 create policy "admin can view all profiles" on user_profiles for select to authenticated
-  using (exists (select 1 from user_profiles p where p.id = auth.uid() and p.role = 'admin'));
+  using (is_admin());
 
 drop policy if exists "admin can insert profiles" on user_profiles;
 create policy "admin can insert profiles" on user_profiles for insert to authenticated
-  with check (exists (select 1 from user_profiles p where p.id = auth.uid() and p.role = 'admin'));
+  with check (is_admin());
 
 drop policy if exists "admin can update profiles" on user_profiles;
 create policy "admin can update profiles" on user_profiles for update to authenticated
-  using (exists (select 1 from user_profiles p where p.id = auth.uid() and p.role = 'admin'))
-  with check (exists (select 1 from user_profiles p where p.id = auth.uid() and p.role = 'admin'));
+  using (is_admin())
+  with check (is_admin());
 
 drop policy if exists "admin can delete profiles" on user_profiles;
 create policy "admin can delete profiles" on user_profiles for delete to authenticated
-  using (exists (select 1 from user_profiles p where p.id = auth.uid() and p.role = 'admin'));
+  using (is_admin());
 
 -- skus: SELECT stays open to every authenticated role, including
 -- requester — they need to search the catalog for their own new-request
@@ -985,6 +1013,7 @@ create policy "anon can view active skus" on skus for select to anon using (is_a
 -- skus.category as a plain text column, not a join.
 drop policy if exists "anon full access - categories" on categories;
 drop policy if exists "authenticated full access - categories" on categories;
+drop policy if exists "staff and admin full access - categories" on categories;
 create policy "staff and admin full access - categories" on categories for all to authenticated
   using (is_staff_or_admin()) with check (is_staff_or_admin());
 
@@ -992,6 +1021,7 @@ create policy "staff and admin full access - categories" on categories for all t
 -- role, kept staff/admin-only same as before, just via the shared helper.
 drop policy if exists "anon full access - lots" on lots;
 drop policy if exists "authenticated full access - lots" on lots;
+drop policy if exists "staff and admin full access - lots" on lots;
 create policy "staff and admin full access - lots" on lots for all to authenticated
   using (is_staff_or_admin()) with check (is_staff_or_admin());
 
@@ -1018,21 +1048,25 @@ create policy "requester can view own requests" on requests for select to authen
 -- history/discrepancy reports.
 drop policy if exists "anon full access - transactions" on transactions;
 drop policy if exists "authenticated full access - transactions" on transactions;
+drop policy if exists "staff and admin full access - transactions" on transactions;
 create policy "staff and admin full access - transactions" on transactions for all to authenticated
   using (is_staff_or_admin()) with check (is_staff_or_admin());
 
 drop policy if exists "anon full access - discrepancies" on discrepancies;
 drop policy if exists "authenticated full access - discrepancies" on discrepancies;
+drop policy if exists "staff and admin full access - discrepancies" on discrepancies;
 create policy "staff and admin full access - discrepancies" on discrepancies for all to authenticated
   using (is_staff_or_admin()) with check (is_staff_or_admin());
 
 drop policy if exists "anon full access - lot_sequences" on lot_sequences;
 drop policy if exists "authenticated full access - lot_sequences" on lot_sequences;
+drop policy if exists "staff and admin full access - lot_sequences" on lot_sequences;
 create policy "staff and admin full access - lot_sequences" on lot_sequences for all to authenticated
   using (is_staff_or_admin()) with check (is_staff_or_admin());
 
 drop policy if exists "anon full access - sku_sequences" on sku_sequences;
 drop policy if exists "authenticated full access - sku_sequences" on sku_sequences;
+drop policy if exists "staff and admin full access - sku_sequences" on sku_sequences;
 create policy "staff and admin full access - sku_sequences" on sku_sequences for all to authenticated
   using (is_staff_or_admin()) with check (is_staff_or_admin());
 

@@ -1401,6 +1401,51 @@ function tableHtml(headers, rows) {
 // ============================================================================
 let msAllStaff = [];
 let msEditingId = null;
+let msDepartmentOptions = [];
+
+// There's no dedicated departments table — it's a free-text column on
+// user_profiles — so the dropdown's option list is just the distinct
+// department names already in use, plus anything typed via the "+" button
+// that hasn't been assigned to anyone yet. That "not assigned yet" part is
+// remembered in localStorage (per-browser, not synced) purely so a newly
+// typed department doesn't vanish from the list the moment the sheet
+// reopens; it's a convenience, not a source of truth.
+const DEPARTMENTS_STORAGE_KEY = 'wh_departments_v1';
+function loadStoredDepartments() {
+  try { return JSON.parse(localStorage.getItem(DEPARTMENTS_STORAGE_KEY) || '[]'); } catch (_) { return []; }
+}
+function saveStoredDepartments(list) {
+  try { localStorage.setItem(DEPARTMENTS_STORAGE_KEY, JSON.stringify(list)); } catch (_) { /* non-critical */ }
+}
+function refreshDepartmentOptions() {
+  const fromStaff = msAllStaff.map((s) => s.department).filter(Boolean);
+  msDepartmentOptions = Array.from(new Set([...loadStoredDepartments(), ...fromStaff])).sort((a, b) => a.localeCompare(b, 'th'));
+}
+function renderDepartmentOptions(selected = '') {
+  const sel = document.getElementById('ms-department');
+  if (!sel) return;
+  const current = selected || sel.value;
+  sel.innerHTML = `
+    <option value="">${t('noDepartment')}</option>
+    ${msDepartmentOptions.map((d) => `<option value="${escapeHtml(d)}" ${d === current ? 'selected' : ''}>${escapeHtml(d)}</option>`).join('')}
+  `;
+}
+function onAddDepartment(newInput, newRow) {
+  const name = newInput.value.trim();
+  const errEl = document.getElementById('ms-error');
+  errEl.innerHTML = '';
+  if (!name) return;
+  if (msDepartmentOptions.includes(name)) {
+    errEl.innerHTML = `<div class="form-error">${escapeHtml(t('errorDepartmentExists'))}</div>`;
+    return;
+  }
+  msDepartmentOptions = [...msDepartmentOptions, name].sort((a, b) => a.localeCompare(b, 'th'));
+  saveStoredDepartments(msDepartmentOptions);
+  renderDepartmentOptions(name);
+  newInput.value = '';
+  newRow.hidden = true;
+  toast(t('toastDepartmentAdded'), 'success');
+}
 
 document.getElementById('btn-manage-staff').addEventListener('click', openManageStaffSheet);
 
@@ -1440,7 +1485,15 @@ function manageStaffSheetHtml() {
         </div>
         <div class="field">
           <label for="ms-department">${t('fieldStaffDepartment')}</label>
-          <input type="text" id="ms-department">
+          <div class="field-with-btn">
+            <select id="ms-department"></select>
+            <button type="button" class="btn-icon-add" id="ms-department-add-btn" title="${t('addDepartmentTitle')}" aria-label="${t('addDepartmentTitle')}">${icon('plusCircle', 18)}</button>
+          </div>
+          <div class="new-category-row" id="ms-department-new-row" hidden>
+            <input type="text" id="ms-department-new-input" placeholder="${t('newDepartmentPlaceholder')}">
+            <button type="button" class="btn btn-outline btn-sm" id="ms-department-new-confirm">${icon('check', 14)}<span>${t('add')}</span></button>
+            <button type="button" class="btn btn-ghost btn-sm" id="ms-department-new-cancel">${icon('xCircle', 14)}</button>
+          </div>
         </div>
       </div>
       <div class="card-row">
@@ -1465,6 +1518,22 @@ function msSubmitButtonInner(mode) {
 function wireManageStaffForm() {
   document.getElementById('form-manage-staff').addEventListener('submit', onManageStaffSubmit);
   document.getElementById('ms-cancel-edit').addEventListener('click', () => resetManageStaffForm());
+
+  const addBtn = document.getElementById('ms-department-add-btn');
+  const newRow = document.getElementById('ms-department-new-row');
+  const newInput = document.getElementById('ms-department-new-input');
+  addBtn.addEventListener('click', () => {
+    newRow.hidden = !newRow.hidden;
+    if (!newRow.hidden) newInput.focus();
+  });
+  document.getElementById('ms-department-new-cancel').addEventListener('click', () => {
+    newInput.value = '';
+    newRow.hidden = true;
+  });
+  document.getElementById('ms-department-new-confirm').addEventListener('click', () => onAddDepartment(newInput, newRow));
+  newInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); onAddDepartment(newInput, newRow); }
+  });
 }
 
 function resetManageStaffForm() {
@@ -1472,6 +1541,7 @@ function resetManageStaffForm() {
   const form = document.getElementById('form-manage-staff');
   form.reset();
   document.getElementById('ms-email').disabled = false;
+  renderDepartmentOptions();
   document.getElementById('ms-submit').innerHTML = msSubmitButtonInner('add');
   document.getElementById('ms-cancel-edit').hidden = true;
 }
@@ -1512,6 +1582,8 @@ async function onManageStaffSubmit(e) {
 async function loadManageStaffList() {
   try {
     msAllStaff = await DB.listStaff();
+    refreshDepartmentOptions();
+    renderDepartmentOptions();
     renderManageStaffLists();
   } catch (err) {
     toast(err.message || 'Could not load staff', 'error');
@@ -1561,7 +1633,7 @@ function startEditStaff(id) {
   emailEl.disabled = true;
   document.getElementById('ms-name').value = s.name;
   document.getElementById('ms-role').value = s.role;
-  document.getElementById('ms-department').value = s.department || '';
+  renderDepartmentOptions(s.department || '');
   document.getElementById('ms-submit').innerHTML = msSubmitButtonInner('edit');
   document.getElementById('ms-cancel-edit').hidden = false;
   document.getElementById('sheet-body').scrollTop = 0;

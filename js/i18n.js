@@ -136,6 +136,10 @@ const I18N = {
     newCategoryPlaceholder: 'New category name',
     toastCategoryCreated: 'Category added',
     errorCategoryExists: 'That category already exists',
+    addDepartmentTitle: 'Add a new department',
+    newDepartmentPlaceholder: 'New department name',
+    toastDepartmentAdded: 'Department added',
+    errorDepartmentExists: 'That department already exists',
 
     // Landing page
     landingTitle: 'Warehouse Inventory',
@@ -370,6 +374,10 @@ const I18N = {
     newCategoryPlaceholder: 'ชื่อหมวดหมู่ใหม่',
     toastCategoryCreated: 'เพิ่มหมวดหมู่แล้ว',
     errorCategoryExists: 'มีหมวดหมู่นี้อยู่แล้ว',
+    addDepartmentTitle: 'เพิ่มแผนกใหม่',
+    newDepartmentPlaceholder: 'ชื่อแผนกใหม่',
+    toastDepartmentAdded: 'เพิ่มแผนกแล้ว',
+    errorDepartmentExists: 'มีแผนกนี้อยู่แล้ว',
 
     // Landing page
     landingTitle: 'ระบบคลังวัสดุ',
