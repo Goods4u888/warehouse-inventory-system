@@ -6,40 +6,22 @@
 <title>Warehouse Inventory</title>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Oswald:wght@500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap">
 
-<link rel="stylesheet" href="css/tokens.css?v=20260909t">
-<link rel="stylesheet" href="css/app.css?v=20260909t">
+<link rel="stylesheet" href="css/tokens.css?v=20260911c">
+<link rel="stylesheet" href="css/app.css?v=20260911c">
 </head>
 <body class="hub-page">
 
-<div class="cine-backdrop" aria-hidden="true">
-  <div class="cine-spotlight"></div>
-  <svg class="cine-racking" viewBox="0 0 1200 260" preserveAspectRatio="xMidYMax slice">
-    <defs>
-      <linearGradient id="cineFade" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="currentColor" stop-opacity="0"/>
-        <stop offset="100%" stop-color="currentColor" stop-opacity=".4"/>
-      </linearGradient>
-    </defs>
-    <g stroke="url(#cineFade)" stroke-width="3">
-      <line x1="60" y1="260" x2="60" y2="20"/>
-      <line x1="180" y1="260" x2="180" y2="60"/>
-      <line x1="300" y1="260" x2="300" y2="10"/>
-      <line x1="900" y1="260" x2="900" y2="10"/>
-      <line x1="1020" y1="260" x2="1020" y2="60"/>
-      <line x1="1140" y1="260" x2="1140" y2="20"/>
-    </g>
-    <g stroke="url(#cineFade)" stroke-width="2">
-      <line x1="20" y1="90" x2="340" y2="90"/>
-      <line x1="20" y1="150" x2="340" y2="150"/>
-      <line x1="20" y1="210" x2="340" y2="210"/>
-      <line x1="860" y1="90" x2="1180" y2="90"/>
-      <line x1="860" y1="150" x2="1180" y2="150"/>
-      <line x1="860" y1="210" x2="1180" y2="210"/>
-    </g>
-  </svg>
-</div>
+<svg class="lp-graphic" viewBox="0 0 600 520" aria-hidden="true">
+  <rect x="360" y="30" width="150" height="150" rx="32" fill="var(--lp-brand)" opacity=".92"/>
+  <rect x="470" y="170" width="96" height="96" rx="22" fill="var(--lp-amber)" opacity=".9"/>
+  <circle cx="430" cy="250" r="60" fill="var(--lp-coral)" opacity=".14"/>
+  <rect x="300" y="190" width="64" height="64" rx="16" fill="var(--lp-brand-dark)" opacity=".12"/>
+  <circle cx="540" cy="60" r="20" fill="var(--lp-amber)" opacity=".55"/>
+  <rect x="410" y="300" width="50" height="50" rx="13" fill="var(--lp-brand)" opacity=".28"/>
+  <circle cx="350" cy="100" r="14" fill="var(--lp-coral)" opacity=".4"/>
+</svg>
 
 <div class="app" style="max-width:720px">
 
@@ -55,7 +37,7 @@
   </header>
 
   <main>
-    <p class="cine-tag">Warehouse Operations</p>
+    <p class="lp-tag">Enterprise Inventory Platform</p>
     <p class="eyebrow" data-i18n="landingEyebrow">Receiving · Requisition</p>
 
     <div class="hub-grid">
@@ -66,7 +48,7 @@
         <span class="hub-tile-desc" data-i18n="landingRequesterDesc">Search the catalog and say how many, describe what you need, or both.</span>
         <span class="hub-tile-cta"><span data-i18n="landingEnter">Open the form</span><span data-icon="arrowRight" data-icon-size="14"></span></span>
       </a>
-      <a class="hub-tile" href="admin.html">
+      <a class="hub-tile hub-tile-accent-amber" href="admin.html">
         <span class="hub-tile-icon" data-icon="sliders" data-icon-size="24"></span>
         <span class="chip chip-neutral"><span data-icon="lock" data-icon-size="11"></span><span data-i18n="landingBadgeLoginRequired">Staff login required</span></span>
         <span class="hub-tile-title" data-i18n="landingAdminTitle">Admin</span>
@@ -77,10 +59,10 @@
   </main>
 </div>
 
-<div class="app-version no-print">v20260909t</div>
+<div class="app-version no-print">v20260911c</div>
 
-<script src="js/i18n.js?v=20260909t"></script>
-<script src="js/icons.js?v=20260909t"></script>
+<script src="js/i18n.js?v=20260911c"></script>
+<script src="js/icons.js?v=20260911c"></script>
 <script>
   document.documentElement.lang = I18n.current;
   I18n.applyStatic();
