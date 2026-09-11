@@ -70,15 +70,30 @@ in the database enforces this split for real, not just in the UI — see
    Running `schema.sql` automatically gives that specific email an `admin`
    profile the moment it exists (see the bootstrap block under "1c. User
    profiles" in the file) — so create the account *before* or *after*
-   running the schema, either order works. Sign in with it, then add
-   everyone else from inside the app (see "Roles" below) — no more SQL
-   needed after this one bootstrap account.
-4. **Credentials are already wired up** in `js/config.js` (your project URL
+   running the schema, either order works. This is the one and only account
+   that has to be created by hand this way — a chicken-and-egg requirement,
+   since adding everyone else from inside the app (step 4, then "Roles"
+   below) needs an admin to already be signed in.
+4. **Deploy the `create-staff-login` Edge Function, once.** This is what
+   lets an admin add a new person from inside Manage Staff without touching
+   the Supabase dashboard. In your Supabase project: **Edge Functions →
+   Create a new function**, name it exactly `create-staff-login` (must
+   match the name the app calls it by), paste in the full contents of
+   `supabase/functions/create-staff-login/index.ts`, and **Deploy**.
+   Nothing else to configure — the service_role key it needs is injected
+   into every Edge Function automatically by the platform, you never paste
+   it in yourself. (Prefer the CLI? `supabase functions deploy
+   create-staff-login` works too, once the project is linked — the
+   Dashboard path above needs no extra tooling, so it's the one documented
+   here.)
+5. **Credentials are already wired up** in `js/config.js` (your project URL
    and anon/publishable key). If you ever rotate the anon key, update it
    there — never put the `service_role` key in this file, it bypasses Row
    Level Security entirely and this file ships to every browser that loads
-   the app.
-5. **Open the app.** Double-clicking `index.html` works for a first look, but
+   the app. (The Edge Function in step 4 is the one place this app's
+   service_role key is used at all, and it never leaves Supabase's own
+   servers.)
+6. **Open the app.** Double-clicking `index.html` works for a first look, but
    the camera scanner needs a "secure context" (HTTPS or `localhost`), so for
    real use serve it locally instead:
    ```
@@ -254,14 +269,17 @@ in the database enforces this split for real, not just in the UI — see
   free-text field, same as before — a natural follow-up once this pattern
   proves out, not done in this pass.
 
-  **Adding a person:** create their login the same way the bootstrap admin
-  account was created (Setup step 3 — Supabase dashboard, Authentication →
-  Users → Add user), then, signed in as an Admin, open **Manage Staff**
-  (the people icon next to the language toggle) and add their email, name,
-  role, and department. The email must already exist as a login — Manage
-  Staff only manages the profile layered on top of it, since there's no
-  `service_role` key in this app to create logins from the browser (see
-  Setup step 4).
+  **Adding a person:** signed in as an Admin, open **Manage Staff** (the
+  people icon next to the language toggle) and add their email, name,
+  role, and department — the login is created automatically (via the
+  `create-staff-login` Edge Function, Setup step 4) if that email doesn't
+  already have one, and you'll get a one-time password shown once to share
+  with them directly (chat, in person — it's never emailed). If the email
+  already has a login (say, from before this feature existed, or created
+  by hand in the dashboard), Manage Staff just attaches the profile to it
+  instead of erroring. The only account that still has to be created by
+  hand in the Supabase dashboard is the very first bootstrap admin (Setup
+  step 3) — everyone after that goes through Manage Staff.
 - **Unit conversion is stored, not yet enforced in the UI.** `alt_uom` and
   `conversion_factor` exist on each SKU, but Receive and Issue currently work
   in the SKU's base unit only. Wiring the conversion into the receive form
@@ -288,6 +306,7 @@ js/icons.js                    shared inline-SVG icon set (icon(name), catIcon(c
 js/app.js                      admin.html's view router, auth gate, and UI wiring
 js/request.js                  request.html's own small, standalone script
 supabase/schema.sql            tables, views, RPCs, RLS policies, 5-item seed
+supabase/functions/create-staff-login/index.ts   Edge Function — creates a person's login from Manage Staff (see Setup step 4)
 supabase/seed_mockup_100.sql   optional ~100-item Thai demo catalog (see Setup step 2)
 scripts/gen_mockup_seed.py     regenerates seed_mockup_100.sql from an editable Python list
 supabase/seed_mockup_interior_100.sql   optional ~100-item interior/maintenance catalog (see Setup step 2)

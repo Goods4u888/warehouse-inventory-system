@@ -313,7 +313,7 @@ main {
 .field input:disabled { background: var(--line); color: var(--ink-3); cursor: not-allowed; }
 
 .field-with-btn { display: flex; gap: var(--s2); align-items: stretch; }
-.field-with-btn select { flex: 1; min-width: 0; }
+.field-with-btn select, .field-with-btn input { flex: 1; min-width: 0; }
 .field-with-btn .btn { flex: 1; }
 
 /* Copies-to-print field next to every "Print sticker" button (Manage Items

@@ -854,32 +854,16 @@ begin
 end;
 $$;
 
--- Manage Staff (admin.html, admin-only) needs to turn "the email I just
--- created in the Supabase dashboard" into the uuid a user_profiles row
--- actually keys on — auth.users isn't exposed the way public tables are,
--- so this is the one narrow, admin-gated way to look one up by email
--- instead of asking an admin to copy a raw uuid out of the dashboard by
--- hand. security definer to reach auth.users at all; the role check inside
--- does the actual admin-only gating (RLS can't cover a table this function
--- doesn't otherwise touch).
-create or replace function find_auth_user_id(p_email text) returns uuid
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_caller_role text;
-  v_id uuid;
-begin
-  select role into v_caller_role from user_profiles where id = auth.uid();
-  if v_caller_role is distinct from 'admin' then
-    raise exception 'Admin only';
-  end if;
-
-  select id into v_id from auth.users where email = p_email;
-  return v_id;
-end;
-$$;
+-- find_auth_user_id() used to be Manage Staff's way of turning "an email an
+-- admin already created by hand in the Supabase dashboard" into a uuid to
+-- attach a profile to. It's gone: Manage Staff now creates the login
+-- itself (see supabase/functions/create-staff-login), which does its own
+-- equivalent lookup server-side with the service_role key when the email
+-- already has a login — strictly more capable, since it doesn't require
+-- the admin to already know a match exists. Dropped rather than left
+-- unused, since it's a security definer function able to look up any
+-- email in auth.users.
+drop function if exists find_auth_user_id(text);
 
 -- Used throughout section 8's policies below: true when the caller has a
 -- staff or admin profile. Requester accounts are expected to be a much
@@ -934,7 +918,6 @@ revoke execute on function create_public_request(text, text, text, text, jsonb) 
 revoke execute on function next_request_code() from public;
 revoke execute on function create_authenticated_request(uuid, numeric, date, text, text, text) from public;
 revoke execute on function set_request_status(uuid, text) from public;
-revoke execute on function find_auth_user_id(text) from public;
 revoke execute on function is_staff_or_admin() from public;
 revoke execute on function is_admin() from public;
 
@@ -946,7 +929,6 @@ grant execute on function create_public_request(text, text, text, text, jsonb) t
 grant execute on function next_request_code() to authenticated;
 grant execute on function create_authenticated_request(uuid, numeric, date, text, text, text) to authenticated;
 grant execute on function set_request_status(uuid, text) to authenticated;
-grant execute on function find_auth_user_id(text) to authenticated;
 -- Called from inside policy expressions (section 8), evaluated as the
 -- querying role — authenticated needs EXECUTE for those policies to work.
 grant execute on function is_staff_or_admin() to authenticated;

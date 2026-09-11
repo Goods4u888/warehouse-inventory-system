@@ -1459,6 +1459,7 @@ function openManageStaffSheet() {
 function manageStaffSheetHtml() {
   return `
     <div id="ms-error"></div>
+    <div id="ms-credentials" hidden></div>
     <form id="form-manage-staff">
       <div class="field">
         <label for="ms-email">${t('fieldStaffEmail')}</label>
@@ -1541,6 +1542,49 @@ function resetManageStaffForm() {
   document.getElementById('ms-cancel-edit').hidden = true;
 }
 
+// Shown once, right after a brand-new login is created — a toast isn't
+// enough here since the admin needs time to copy the password before it's
+// gone for good (the server never stores or shows it again).
+function staffCredentialsHtml(email, password) {
+  return `
+    <div class="card">
+      <p class="card-title">${t('staffCredentialsTitle')}</p>
+      <p class="card-meta">${escapeHtml(email)}</p>
+      <div class="field-with-btn" style="margin-top:var(--s2)">
+        <input type="text" id="ms-credentials-password" value="${escapeHtml(password)}" readonly>
+        <button type="button" class="btn btn-outline btn-sm" id="ms-credentials-copy">${icon('copy', 14)}<span>${t('btnCopy')}</span></button>
+      </div>
+      <p class="field-hint">${t('staffCredentialsHint')}</p>
+      <div class="card-row" style="margin-top:var(--s3)">
+        <button type="button" class="btn btn-primary btn-block" id="ms-credentials-done">${icon('checkCircle', 16)}<span>${t('btnDone')}</span></button>
+      </div>
+    </div>
+  `;
+}
+
+function showStaffCredentials(email, password) {
+  const box = document.getElementById('ms-credentials');
+  box.innerHTML = staffCredentialsHtml(email, password);
+  box.hidden = false;
+  document.getElementById('form-manage-staff').hidden = true;
+  document.getElementById('ms-credentials-copy').addEventListener('click', () => {
+    navigator.clipboard.writeText(password).then(() => toast(t('toastPasswordCopied'), 'success'));
+  });
+  document.getElementById('ms-credentials-done').addEventListener('click', async () => {
+    hideStaffCredentials();
+    resetManageStaffForm();
+    await loadManageStaffList();
+  });
+  document.getElementById('sheet-body').scrollTop = 0;
+}
+
+function hideStaffCredentials() {
+  const box = document.getElementById('ms-credentials');
+  box.hidden = true;
+  box.innerHTML = '';
+  document.getElementById('form-manage-staff').hidden = false;
+}
+
 async function onManageStaffSubmit(e) {
   e.preventDefault();
   const errEl = document.getElementById('ms-error');
@@ -1548,17 +1592,25 @@ async function onManageStaffSubmit(e) {
   const btn = document.getElementById('ms-submit');
   btn.disabled = true;
   try {
-    let id = msEditingId;
-    if (!id) {
+    if (!msEditingId) {
       const email = document.getElementById('ms-email').value.trim();
-      id = await DB.findAuthUserId(email);
-      if (!id) {
-        errEl.innerHTML = `<div class="form-error">${escapeHtml(t('errorNoAuthUser'))}</div>`;
+      const result = await DB.createStaffLogin({
+        email,
+        name: document.getElementById('ms-name').value.trim(),
+        role: document.getElementById('ms-role').value,
+        department: document.getElementById('ms-department').value.trim(),
+      });
+      if (result.generated_password) {
+        showStaffCredentials(email, result.generated_password);
         return;
       }
+      toast(t('toastStaffSaved'), 'success');
+      resetManageStaffForm();
+      await loadManageStaffList();
+      return;
     }
     await DB.upsertProfile({
-      id,
+      id: msEditingId,
       name: document.getElementById('ms-name').value.trim(),
       role: document.getElementById('ms-role').value,
       department: document.getElementById('ms-department').value.trim(),

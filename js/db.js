@@ -47,30 +47,41 @@ const DB = {
     return data;
   },
 
-  // Manage Staff (admin-only — RLS refuses these to anyone else). Creating
-  // the underlying login is still a manual step in the Supabase dashboard
-  // (Authentication -> Users -> Add user, same as the original single
-  // admin account) — there's no service_role key in this app to do that
-  // from the browser (see js/config.js). This only manages the profile
-  // (name/role/department/active) layered on top of that account.
+  // Manage Staff (admin-only — RLS refuses these to anyone else).
   async listStaff() {
     const { data, error } = await supabaseClient.from('user_profiles').select('*').order('name');
     if (error) throw error;
     return data;
   },
 
-  // Resolves the email an admin just created in the Supabase dashboard into
-  // the uuid a profile row actually keys on — auth.users isn't queryable
-  // from the client directly. null means no account exists for that email
-  // yet (create it in the dashboard first).
-  async findAuthUserId(email) {
-    const { data, error } = await supabaseClient.rpc('find_auth_user_id', { p_email: email });
-    if (error) throw error;
+  // Creates the person's Auth login (or, if one already exists for that
+  // email from before this feature/the original dashboard bootstrap,
+  // reuses it) and upserts their user_profiles row, all server-side via
+  // the create-staff-login Edge Function (needs the service_role key,
+  // which never ships to the browser — see js/config.js). Returns
+  // { id, generated_password } — generated_password is null when an
+  // existing login was reused instead of a new one being created.
+  async createStaffLogin({ email, name, role, department }) {
+    const { data, error } = await supabaseClient.functions.invoke('create-staff-login', {
+      body: { email, name, role, department },
+    });
+    if (error) {
+      // supabase-js doesn't parse the function's JSON error body into
+      // error.message for us — pull the real reason out ourselves,
+      // falling back to the generic message if that fails.
+      let msg = error.message;
+      try {
+        const body = await error.context.json();
+        if (body?.error) msg = body.error;
+      } catch (_) { /* not JSON, or already consumed */ }
+      throw new Error(msg);
+    }
     return data;
   },
 
-  // id must already exist as a Supabase Auth user (created in the
-  // dashboard first) — this only inserts/updates their profile row.
+  // id must already exist as a Supabase Auth user — this only
+  // inserts/updates their profile row (used for editing an existing
+  // person; new people go through createStaffLogin above).
   async upsertProfile({ id, name, role, department, isActive }) {
     const { data, error } = await supabaseClient
       .from('user_profiles')
