@@ -1401,25 +1401,18 @@ function tableHtml(headers, rows) {
 // ============================================================================
 let msAllStaff = [];
 let msEditingId = null;
-let msDepartmentOptions = [];
+let msDepartments = [];
 
-// There's no dedicated departments table — it's a free-text column on
-// user_profiles — so the dropdown's option list is just the distinct
-// department names already in use, plus anything typed via the "+" button
-// that hasn't been assigned to anyone yet. That "not assigned yet" part is
-// remembered in localStorage (per-browser, not synced) purely so a newly
-// typed department doesn't vanish from the list the moment the sheet
-// reopens; it's a convenience, not a source of truth.
-const DEPARTMENTS_STORAGE_KEY = 'wh_departments_v1';
-function loadStoredDepartments() {
-  try { return JSON.parse(localStorage.getItem(DEPARTMENTS_STORAGE_KEY) || '[]'); } catch (_) { return []; }
-}
-function saveStoredDepartments(list) {
-  try { localStorage.setItem(DEPARTMENTS_STORAGE_KEY, JSON.stringify(list)); } catch (_) { /* non-critical */ }
-}
-function refreshDepartmentOptions() {
-  const fromStaff = msAllStaff.map((s) => s.department).filter(Boolean);
-  msDepartmentOptions = Array.from(new Set([...loadStoredDepartments(), ...fromStaff])).sort((a, b) => a.localeCompare(b, 'th'));
+// Backed by the departments table (schema.sql) — shared across every admin
+// and device, not just the browser that typed a new one in. Mirrors
+// loadManageItemsCategories()/renderCategoryOptions()/onAddCategory() above.
+async function loadManageStaffDepartments() {
+  try {
+    msDepartments = await DB.listDepartments();
+    renderDepartmentOptions();
+  } catch (err) {
+    toast(err.message || 'Could not load departments', 'error');
+  }
 }
 function renderDepartmentOptions(selected = '') {
   const sel = document.getElementById('ms-department');
@@ -1427,24 +1420,25 @@ function renderDepartmentOptions(selected = '') {
   const current = selected || sel.value;
   sel.innerHTML = `
     <option value="">${t('noDepartment')}</option>
-    ${msDepartmentOptions.map((d) => `<option value="${escapeHtml(d)}" ${d === current ? 'selected' : ''}>${escapeHtml(d)}</option>`).join('')}
+    ${msDepartments.map((d) => `<option value="${escapeHtml(d.name)}" ${d.name === current ? 'selected' : ''}>${escapeHtml(d.name)}</option>`).join('')}
   `;
 }
-function onAddDepartment(newInput, newRow) {
+async function onAddDepartment(newInput, newRow) {
   const name = newInput.value.trim();
   const errEl = document.getElementById('ms-error');
   errEl.innerHTML = '';
   if (!name) return;
-  if (msDepartmentOptions.includes(name)) {
-    errEl.innerHTML = `<div class="form-error">${escapeHtml(t('errorDepartmentExists'))}</div>`;
-    return;
+  try {
+    await DB.createDepartment(name);
+    msDepartments = await DB.listDepartments();
+    renderDepartmentOptions(name);
+    newInput.value = '';
+    newRow.hidden = true;
+    toast(t('toastDepartmentAdded'), 'success');
+  } catch (err) {
+    const msg = /duplicate|unique/i.test(err.message || '') ? t('errorDepartmentExists') : (err.message || 'Could not add department');
+    errEl.innerHTML = `<div class="form-error">${escapeHtml(msg)}</div>`;
   }
-  msDepartmentOptions = [...msDepartmentOptions, name].sort((a, b) => a.localeCompare(b, 'th'));
-  saveStoredDepartments(msDepartmentOptions);
-  renderDepartmentOptions(name);
-  newInput.value = '';
-  newRow.hidden = true;
-  toast(t('toastDepartmentAdded'), 'success');
 }
 
 document.getElementById('btn-manage-staff').addEventListener('click', openManageStaffSheet);
@@ -1458,6 +1452,7 @@ function openManageStaffSheet() {
   msEditingId = null;
   Sheet.open(t('manageStaffTitle'), manageStaffSheetHtml());
   wireManageStaffForm();
+  loadManageStaffDepartments();
   loadManageStaffList();
 }
 
@@ -1582,8 +1577,6 @@ async function onManageStaffSubmit(e) {
 async function loadManageStaffList() {
   try {
     msAllStaff = await DB.listStaff();
-    refreshDepartmentOptions();
-    renderDepartmentOptions();
     renderManageStaffLists();
   } catch (err) {
     toast(err.message || 'Could not load staff', 'error');

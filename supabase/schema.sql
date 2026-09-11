@@ -116,6 +116,31 @@ begin
 end $$;
 
 -- ----------------------------------------------------------------------------
+-- 1d. Departments — reference table backing the department dropdown in
+--     Manage Staff. Deliberately NOT a foreign key off user_profiles.department
+--     (that column stays free text): department was optional/free-text
+--     before this table existed, so a handful of existing profiles could
+--     have values that don't line up cleanly, and a hard FK would block
+--     re-running this file against that data. This table only exists to
+--     give the "+" button in Manage Staff something shared to add to,
+--     instead of remembering new department names in one admin's browser
+--     only. Admins can add a new one straight from the app — no SQL needed
+--     for that going forward.
+-- ----------------------------------------------------------------------------
+create table if not exists departments (
+  id          uuid primary key default gen_random_uuid(),
+  name        text unique not null,
+  created_at  timestamptz not null default now()
+);
+
+-- Backfill: anyone already assigned a department before this table existed
+-- shouldn't have that name silently disappear from the dropdown once it
+-- switches from "derived from staff" to "read from this table".
+insert into departments (name)
+select distinct department from user_profiles where department is not null and department <> ''
+on conflict (name) do nothing;
+
+-- ----------------------------------------------------------------------------
 -- 2. Lots — LEGACY as of 2026-09-08. Originally one row per receiving
 --    event, with its own QR sticker per batch. The system now uses one
 --    permanent QR sticker per ITEM instead (see skus.qty_on_hand and the
@@ -952,6 +977,7 @@ alter table discrepancies enable row level security;
 alter table lot_sequences enable row level security;
 alter table sku_sequences enable row level security;
 alter table categories enable row level security;
+alter table departments enable row level security;
 alter table request_sequences enable row level security;
 alter table user_profiles enable row level security;
 
@@ -1015,6 +1041,14 @@ drop policy if exists "anon full access - categories" on categories;
 drop policy if exists "authenticated full access - categories" on categories;
 drop policy if exists "staff and admin full access - categories" on categories;
 create policy "staff and admin full access - categories" on categories for all to authenticated
+  using (is_staff_or_admin()) with check (is_staff_or_admin());
+
+-- departments: staff/admin only (Manage Staff's department dropdown), same
+-- reasoning as categories above — Manage Staff itself is admin-only in the
+-- UI, but that split stays UI-only rather than RLS, consistent with every
+-- other staff/admin table here.
+drop policy if exists "staff and admin full access - departments" on departments;
+create policy "staff and admin full access - departments" on departments for all to authenticated
   using (is_staff_or_admin()) with check (is_staff_or_admin());
 
 -- lots: legacy (see "2. Lots" above) — nothing writes here anymore for any

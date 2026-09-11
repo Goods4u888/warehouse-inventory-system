@@ -143,6 +143,19 @@ const DB = {
     return data;
   },
 
+  // ---- Departments -----------------------------------------------------------
+  async listDepartments() {
+    const { data, error } = await supabaseClient.from('departments').select('*').order('name');
+    if (error) throw error;
+    return data;
+  },
+
+  async createDepartment(name) {
+    const { data, error } = await supabaseClient.from('departments').insert({ name }).select().single();
+    if (error) throw error;
+    return data;
+  },
+
   // ---- Stock (views) -------------------------------------------------------
   async stockBySku() {
     const { data, error } = await supabaseClient.from('stock_by_sku').select('*').order('sku_code');
