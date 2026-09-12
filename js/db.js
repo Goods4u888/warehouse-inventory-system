@@ -108,7 +108,7 @@ const DB = {
   async listActiveSkusForRequest() {
     const { data, error } = await supabaseClient
       .from('skus')
-      .select('id, sku_code, name, category, base_uom')
+      .select('id, sku_code, name, category, base_uom, image_path')
       .eq('is_active', true)
       .order('name');
     if (error) throw error;
@@ -117,8 +117,10 @@ const DB = {
 
   // sku_code is assigned by the system (random 3-letter prefix + running
   // number, e.g. "QZT-001") — create_sku() generates it server-side, so it's
-  // never part of the payload the caller sends here.
-  async createSku({ name, category, base_uom, alt_uom, conversion_factor, min_threshold }) {
+  // never part of the payload the caller sends here. imagePath: already
+  // uploaded to the public item-photos bucket by the caller (see
+  // uploadItemPhoto below) before this is called.
+  async createSku({ name, category, base_uom, alt_uom, conversion_factor, min_threshold, imagePath }) {
     const { data, error } = await supabaseClient.rpc('create_sku', {
       p_name: name,
       p_category: category,
@@ -126,9 +128,32 @@ const DB = {
       p_alt_uom: alt_uom || null,
       p_conversion_factor: conversion_factor ?? null,
       p_min_threshold: min_threshold ?? 0,
+      p_image_path: imagePath || null,
     });
     if (error) throw error;
     return data;
+  },
+
+  // ---- Item photos (Manage Items) ---------------------------------------------
+  // Public bucket (unlike transaction evidence) — a product photo isn't
+  // sensitive, and showing it on the public request form helps requesters
+  // recognize what they're picking. Reuses the same compression helper as
+  // evidence photos.
+  async uploadItemPhoto(file) {
+    const blob = await DB.compressEvidenceImage(file);
+    const path = `${crypto.randomUUID()}.jpg`;
+    const { error } = await supabaseClient.storage.from('item-photos').upload(path, blob, {
+      contentType: 'image/jpeg',
+    });
+    if (error) throw error;
+    return path;
+  },
+
+  // Public bucket, so this is just a URL string, no signing/expiry needed —
+  // safe to keep around and reuse indefinitely, unlike getEvidenceUrls.
+  getItemPhotoUrl(imagePath) {
+    if (!imagePath) return null;
+    return supabaseClient.storage.from('item-photos').getPublicUrl(imagePath).data.publicUrl;
   },
 
   async updateSku(id, patch) {

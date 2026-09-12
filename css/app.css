@@ -793,6 +793,7 @@ body.hub-page .chip-neutral { background: var(--lp-amber-wash); color: var(--lp-
 }
 .req-item-option:hover { background: var(--paper-2); }
 .req-item-option svg.icon { flex: none; color: var(--ink-3); }
+.req-item-option-thumb { width: 32px; height: 32px; flex: none; border-radius: var(--r-media); object-fit: cover; }
 .req-item-option-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .req-item-empty { color: var(--ink-3); font-size: var(--t-micro); padding: var(--s2) 0; }
 
@@ -827,6 +828,8 @@ body.hub-page .chip-neutral { background: var(--lp-amber-wash); color: var(--lp-
 .req-item-row-remove:hover { background: var(--line); color: var(--ink); }
 .req-item-row-readonly { background: var(--paper); }
 .req-item-row-qty-display { flex: none; font-size: var(--t-meta); font-weight: 600; color: var(--ink); }
+
+.mi-row-thumb { width: 40px; height: 40px; flex: none; border-radius: var(--r-media); object-fit: cover; border: 1px solid var(--line); }
 
 /* ---- Evidence photos (Receive/Return/Issue) --------------------------------- */
 .evidence-thumbs { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s2); }

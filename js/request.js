@@ -149,7 +149,7 @@ function renderItemResults() {
   box.innerHTML = matches.length
     ? matches.map((s) => `
         <button type="button" class="req-item-option" data-id="${escapeHtml(s.id)}">
-          ${icon(catIcon(s.category), 16)}
+          ${s.image_path ? `<img class="req-item-option-thumb" src="${DB.getItemPhotoUrl(s.image_path)}" alt="">` : icon(catIcon(s.category), 16)}
           <span class="req-item-option-text">
             <strong>${escapeHtml(s.name)}</strong>
             <span class="card-meta mono">${escapeHtml(s.sku_code)} · ${escapeHtml(s.base_uom)}</span>

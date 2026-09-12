@@ -311,6 +311,7 @@ supabase/seed_mockup_100.sql   optional ~100-item Thai demo catalog (see Setup s
 scripts/gen_mockup_seed.py     regenerates seed_mockup_100.sql from an editable Python list
 supabase/seed_mockup_interior_100.sql   optional ~100-item interior/maintenance catalog (see Setup step 2)
 scripts/gen_mockup_seed_interior.py     regenerates seed_mockup_interior_100.sql
+scripts/import_category_photos.js       one-time: sets a Wikimedia-sourced photo per category on every item (paste into the browser console on admin.html, signed in as Admin)
 ```
 
 ## Deploy version / cache-busting

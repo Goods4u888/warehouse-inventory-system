@@ -37,6 +37,15 @@ create table if not exists skus (
 comment on table skus is 'Item master. One row per material type (e.g. "Portland Cement 50kg").';
 comment on column skus.conversion_factor is 'How many base_uom in one alt_uom, e.g. 1 pallet = 50 bags -> 50.';
 
+-- A product photo, optional, set from Manage Items. Unlike transaction
+-- evidence (private bucket, staff/admin only), item photos live in a
+-- PUBLIC bucket (item-photos, below) — they help a requester on the public
+-- form recognize what they're picking, and a catalog photo isn't sensitive
+-- the way a delivery/damage photo can be. Stores a Storage path, not a
+-- full URL, same as transaction_images.storage_path — the app builds the
+-- public URL from it (DB.getItemPhotoUrl in js/db.js).
+alter table skus add column if not exists image_path text;
+
 -- ----------------------------------------------------------------------------
 -- 1b. Categories — reference table backing the category dropdown in Manage
 --     Items. skus.category is a foreign key into this table, matched by
@@ -368,6 +377,17 @@ insert into storage.buckets (id, name, public)
 values ('transaction-evidence', 'transaction-evidence', false)
 on conflict (id) do nothing;
 
+-- item-photos: PUBLIC bucket for product photos set from Manage Items
+-- (skus.image_path above) — deliberately the opposite trust boundary from
+-- transaction-evidence, since these help anyone on the public request form
+-- recognize an item and aren't sensitive. Public means reads need no
+-- policy at all (served straight from Storage's public URL endpoint,
+-- bypassing RLS entirely) — only writes are gated, staff/admin only, same
+-- as everything else that maintains the catalog.
+insert into storage.buckets (id, name, public)
+values ('item-photos', 'item-photos', true)
+on conflict (id) do nothing;
+
 -- ----------------------------------------------------------------------------
 -- 5b. Lot numbering — a per-SKU, per-day running counter, so lot codes read
 --     as SKU-YYMMDD-NNN (e.g. CEM-001-260906-001, then -002 for the next
@@ -669,10 +689,17 @@ $$;
 -- staff — a random 3-letter prefix plus a running number for that prefix
 -- (see sku_sequences above). The existence check is just a belt-and-braces
 -- retry; in practice the sequence table already guarantees no collision.
+-- p_image_path (added alongside item photos, see skus.image_path above):
+-- the caller already uploaded the photo to the public item-photos bucket
+-- before calling this, same "upload first, pass the path in" order as
+-- evidence photos — a new item's id isn't known until this insert runs, so
+-- the photo's path is a fresh random name, not keyed off the sku id.
+drop function if exists create_sku(text, text, text, text, numeric, numeric);
+
 create or replace function create_sku(
   p_name text, p_category text, p_base_uom text,
   p_alt_uom text default null, p_conversion_factor numeric default null,
-  p_min_threshold numeric default 0
+  p_min_threshold numeric default 0, p_image_path text default null
 ) returns skus
 language plpgsql
 as $$
@@ -699,8 +726,8 @@ begin
     exit when not exists (select 1 from skus where sku_code = v_code);
   end loop;
 
-  insert into skus (sku_code, name, category, base_uom, alt_uom, conversion_factor, min_threshold)
-  values (v_code, p_name, p_category, p_base_uom, p_alt_uom, p_conversion_factor, p_min_threshold)
+  insert into skus (sku_code, name, category, base_uom, alt_uom, conversion_factor, min_threshold, image_path)
+  values (v_code, p_name, p_category, p_base_uom, p_alt_uom, p_conversion_factor, p_min_threshold, p_image_path)
   returning * into v_sku;
 
   return v_sku;
@@ -1039,7 +1066,7 @@ revoke execute on function insert_transaction_images(uuid, text[]) from public;
 revoke execute on function receive_stock(uuid, numeric, text, text, text, text[]) from public;
 revoke execute on function return_stock(uuid, numeric, text, text, text, text[]) from public;
 revoke execute on function issue_stock(uuid, uuid, numeric, text, text[]) from public;
-revoke execute on function create_sku(text, text, text, text, numeric, numeric) from public;
+revoke execute on function create_sku(text, text, text, text, numeric, numeric, text) from public;
 revoke execute on function create_public_request(text, text, text, text, jsonb) from public;
 revoke execute on function next_request_code() from public;
 revoke execute on function create_authenticated_request(jsonb, text, date, text, text) from public;
@@ -1051,7 +1078,7 @@ grant execute on function insert_transaction_images(uuid, text[]) to authenticat
 grant execute on function receive_stock(uuid, numeric, text, text, text, text[]) to authenticated;
 grant execute on function return_stock(uuid, numeric, text, text, text, text[]) to authenticated;
 grant execute on function issue_stock(uuid, uuid, numeric, text, text[]) to authenticated;
-grant execute on function create_sku(text, text, text, text, numeric, numeric) to authenticated;
+grant execute on function create_sku(text, text, text, text, numeric, numeric, text) to authenticated;
 grant execute on function create_public_request(text, text, text, text, jsonb) to anon, authenticated;
 grant execute on function next_request_code() to authenticated;
 grant execute on function create_authenticated_request(jsonb, text, date, text, text) to authenticated;
@@ -1177,6 +1204,14 @@ drop policy if exists "staff and admin can manage evidence" on storage.objects;
 create policy "staff and admin can manage evidence" on storage.objects for all to authenticated
   using (bucket_id = 'transaction-evidence' and is_staff_or_admin())
   with check (bucket_id = 'transaction-evidence' and is_staff_or_admin());
+
+-- item-photos: public bucket (reads need no policy — see the bucket
+-- comment above), but INSERT/UPDATE/DELETE still need the same
+-- staff/admin gate as everything else in Manage Items.
+drop policy if exists "staff and admin can manage item photos" on storage.objects;
+create policy "staff and admin can manage item photos" on storage.objects for all to authenticated
+  using (bucket_id = 'item-photos' and is_staff_or_admin())
+  with check (bucket_id = 'item-photos' and is_staff_or_admin());
 
 -- lots: legacy (see "2. Lots" above) — nothing writes here anymore for any
 -- role, kept staff/admin-only same as before, just via the shared helper.

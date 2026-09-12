@@ -412,6 +412,11 @@ function manageItemsSheetHtml() {
           <input type="number" id="mi-conversion-factor" min="0" step="any">
         </div>
       </div>
+      <div class="field">
+        <label for="mi-photo">${t('fieldItemPhoto')}</label>
+        <input type="file" id="mi-photo" accept="image/*">
+        <div class="evidence-thumbs" id="mi-photo-preview"></div>
+      </div>
       <div class="card-row">
         <button type="button" class="btn btn-ghost" id="mi-cancel-edit" hidden>${icon('xCircle', 16)}<span>${t('cancel')}</span></button>
         <button type="submit" class="btn btn-primary btn-block" id="mi-submit">${miSubmitButtonInner('add')}</button>
@@ -433,15 +438,56 @@ function manageItemsSheetHtml() {
   `;
 }
 
+// Distinct from evidenceState (Receive/Return/Issue) — this is exactly one
+// photo, and needs to represent three states an existing item's photo can
+// be in: unchanged (existingPath as-is), replaced (file), or cleared
+// (removed). {file: null, existingPath: null, removed: false} is "no
+// photo, nothing picked yet" — the default for a brand-new item.
+let miPhotoState = { file: null, existingPath: null, removed: false };
+
+function wireMiPhotoPicker() {
+  renderMiPhotoThumb();
+  document.getElementById('mi-photo').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      miPhotoState.file = file;
+      miPhotoState.removed = false;
+    }
+    e.target.value = '';
+    renderMiPhotoThumb();
+  });
+}
+
+function renderMiPhotoThumb() {
+  const box = document.getElementById('mi-photo-preview');
+  if (!box) return;
+  const src = miPhotoState.file
+    ? URL.createObjectURL(miPhotoState.file)
+    : (miPhotoState.existingPath && !miPhotoState.removed ? DB.getItemPhotoUrl(miPhotoState.existingPath) : null);
+  box.innerHTML = src ? `
+    <div class="evidence-thumb">
+      <img src="${src}" alt="">
+      <button type="button" class="evidence-thumb-remove" id="mi-photo-remove" aria-label="${escapeHtml(t('btnRemoveItem'))}">${icon('xCircle', 12)}</button>
+    </div>
+  ` : '';
+  document.getElementById('mi-photo-remove')?.addEventListener('click', () => {
+    miPhotoState = { file: null, existingPath: null, removed: true };
+    renderMiPhotoThumb();
+  });
+}
+
 function wireManageItemsForm() {
   miEditingId = null;
   const form = document.getElementById('form-manage-item');
   form.addEventListener('submit', onManageItemSubmit);
+  wireMiPhotoPicker();
   document.getElementById('mi-cancel-edit').addEventListener('click', () => {
     miEditingId = null;
     form.reset();
     document.getElementById('mi-sku-code').value = '';
     renderCategoryOptions();
+    miPhotoState = { file: null, existingPath: null, removed: false };
+    renderMiPhotoThumb();
     document.getElementById('mi-submit').innerHTML = miSubmitButtonInner('add');
     document.getElementById('mi-cancel-edit').hidden = true;
   });
@@ -511,17 +557,28 @@ async function onManageItemSubmit(e) {
   const btn = document.getElementById('mi-submit');
   btn.disabled = true;
   try {
+    // Resolve the photo to whatever it should be after this save: a freshly
+    // uploaded file wins, "removed" clears it, otherwise it's unchanged.
+    let imagePath = miPhotoState.existingPath;
+    if (miPhotoState.file) {
+      imagePath = await DB.uploadItemPhoto(miPhotoState.file);
+    } else if (miPhotoState.removed) {
+      imagePath = null;
+    }
+
     if (miEditingId) {
-      await DB.updateSku(miEditingId, patch);
+      await DB.updateSku(miEditingId, { ...patch, image_path: imagePath });
       toast(t('toastItemUpdated'), 'success');
     } else {
-      await DB.createSku(patch);
+      await DB.createSku({ ...patch, imagePath });
       toast(t('toastItemCreated'), 'success');
     }
     miEditingId = null;
     e.target.reset();
     document.getElementById('mi-sku-code').value = '';
     renderCategoryOptions();
+    miPhotoState = { file: null, existingPath: null, removed: false };
+    renderMiPhotoThumb();
     document.getElementById('mi-submit').innerHTML = miSubmitButtonInner('add');
     document.getElementById('mi-cancel-edit').hidden = true;
     await loadManageItemsList();
@@ -599,6 +656,7 @@ function miRowHtml(s) {
         <label class="mi-check">
           <input type="checkbox" data-mi-select="${s.id}" ${checked} aria-label="${t('selectAll')}">
         </label>
+        ${s.image_path ? `<img class="mi-row-thumb" src="${DB.getItemPhotoUrl(s.image_path)}" alt="">` : ''}
         <div>
           <div class="card-title">${escapeHtml(s.name)}</div>
           <div class="card-meta mono">${escapeHtml(s.sku_code)} · ${escapeHtml(s.base_uom)}</div>
@@ -698,6 +756,8 @@ function startEditSku(id) {
   document.getElementById('mi-alt-uom').value = sku.alt_uom || '';
   document.getElementById('mi-conversion-factor').value = sku.conversion_factor ?? '';
   document.getElementById('mi-min-threshold').value = sku.min_threshold;
+  miPhotoState = { file: null, existingPath: sku.image_path || null, removed: false };
+  renderMiPhotoThumb();
   document.getElementById('mi-submit').innerHTML = miSubmitButtonInner('edit');
   document.getElementById('mi-cancel-edit').hidden = false;
   document.getElementById('sheet-body').scrollTop = 0;
@@ -1407,7 +1467,7 @@ function renderNrItemResults() {
   box.innerHTML = matches.length
     ? matches.map((s) => `
         <button type="button" class="req-item-option" data-id="${escapeHtml(s.id)}">
-          ${icon(catIcon(s.category), 16)}
+          ${s.image_path ? `<img class="req-item-option-thumb" src="${DB.getItemPhotoUrl(s.image_path)}" alt="">` : icon(catIcon(s.category), 16)}
           <span class="req-item-option-text">
             <strong>${escapeHtml(s.name)}</strong>
             <span class="card-meta mono">${escapeHtml(s.sku_code)} · ${escapeHtml(s.base_uom)}</span>
