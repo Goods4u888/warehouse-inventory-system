@@ -346,10 +346,14 @@ const DB = {
   // phone photo doesn't turn into a multi-MB upload. Canvas-based, no
   // library. Falls back to the original file if it isn't a decodable image
   // (createImageBitmap throws) or compression somehow produces a larger
-  // result than the original.
+  // result than the original. imageOrientation: 'from-image' is load-bearing
+  // for phone camera photos specifically — they carry an EXIF orientation
+  // tag (e.g. "rotate 90°" for a portrait shot from a landscape sensor),
+  // and without this option a canvas-based resize can silently ignore it,
+  // producing a sideways/upside-down photo.
   async compressEvidenceImage(file, maxEdge = 1600, quality = 0.8) {
     try {
-      const bitmap = await createImageBitmap(file);
+      const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
       const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
       const w = Math.round(bitmap.width * scale);
       const h = Math.round(bitmap.height * scale);
