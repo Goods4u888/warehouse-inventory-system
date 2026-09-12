@@ -225,6 +225,7 @@ document.getElementById('btn-scan-shortcut').addEventListener('click', () => sho
 // one place instead of needing Reports/Scan/Manage items separately.
 function openItemDetailSheet(row) {
   Sheet.open(t('itemDetailTitle'), `
+    ${row.image_path ? `<img class="idet-photo" src="${DB.getItemPhotoUrl(row.image_path)}" alt="">` : ''}
     <div class="card-row" style="align-items:flex-start">
       <div>
         <div class="card-title" style="font-size:var(--t-sec)">${escapeHtml(row.name)}</div>

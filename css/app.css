@@ -209,6 +209,10 @@ main {
 .card-clickable:hover, .card-clickable:focus-visible { box-shadow: var(--lift-2); outline: none; }
 
 /* ---- Item detail sheet (Stock -> tap a card) -------------------------------------- */
+.idet-photo {
+  width: 100%; max-height: 200px; object-fit: cover;
+  border-radius: var(--r-media); margin-bottom: var(--s4); display: block;
+}
 .idet-move-list { display: flex; flex-direction: column; gap: var(--s2); }
 .idet-move-row {
   display: flex; align-items: center; justify-content: space-between; gap: var(--s3);

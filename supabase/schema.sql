@@ -437,7 +437,8 @@ select
   s.base_uom,
   s.min_threshold,
   s.qty_on_hand                as on_hand,
-  s.qty_on_hand < s.min_threshold as is_low
+  s.qty_on_hand < s.min_threshold as is_low,
+  s.image_path
 from skus s
 where s.is_active;
 
