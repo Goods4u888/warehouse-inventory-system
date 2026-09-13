@@ -1691,16 +1691,17 @@ function renderReportTable(kind) {
   if (kind === 'stock') {
     body.innerHTML = tableHtml(
       [t('colSku'), t('colName'), t('colCategory'), t('colOnHand'), t('colThreshold'), t('colStatus')],
-      rows.map((r) => [r.sku_code, r.name, catLabel(r.category),
-        `<span class="num">${fmtQty(r.on_hand)} ${r.base_uom}</span>`,
+      rows.map((r) => [escapeHtml(r.sku_code), escapeHtml(r.name), escapeHtml(catLabel(r.category)),
+        `<span class="num">${fmtQty(r.on_hand)} ${escapeHtml(r.base_uom)}</span>`,
         `<span class="num">${fmtQty(r.min_threshold)}</span>`,
         r.is_low ? `<span class="chip chip-low">${t('rowLow')}</span>` : `<span class="chip chip-ok">${t('chipOk')}</span>`]),
     );
   } else if (kind === 'movement') {
     body.innerHTML = tableHtml(
       [t('colWhen'), t('colType'), t('colSku'), t('colQty'), t('colBy'), t('colRequest'), t('colEvidence')],
-      rows.map((r) => [fmtDateTime(r.created_at), r.type, `${r.sku_code} — ${r.sku_name}`,
-        `<span class="num">${fmtQty(r.qty)} ${r.uom}</span>`, r.performed_by || '—', r.request_code || '—',
+      rows.map((r) => [fmtDateTime(r.created_at), r.type, `${escapeHtml(r.sku_code)} — ${escapeHtml(r.sku_name)}`,
+        `<span class="num">${fmtQty(r.qty)} ${escapeHtml(r.uom)}</span>`, r.performed_by ? escapeHtml(r.performed_by) : '—',
+        r.request_code ? escapeHtml(r.request_code) : '—',
         r.image_paths?.length
           ? `<button type="button" class="btn btn-ghost btn-sm report-view-photos" data-paths="${escapeHtml(JSON.stringify(r.image_paths))}">${icon('image', 13)}<span>${t('btnViewPhotos', r.image_paths.length)}</span></button>`
           : '—']),
@@ -1711,23 +1712,23 @@ function renderReportTable(kind) {
   } else if (kind === 'discrepancy') {
     body.innerHTML = tableHtml(
       [t('colWhen'), t('colRequest'), t('colSku'), t('colRequested'), t('colActual'), t('colVariance')],
-      rows.map((r) => [fmtDateTime(r.created_at), `${r.request_code} (${r.requester_name})`, `${r.sku_code} — ${r.sku_name}`,
+      rows.map((r) => [fmtDateTime(r.created_at), `${escapeHtml(r.request_code)} (${escapeHtml(r.requester_name)})`, `${escapeHtml(r.sku_code)} — ${escapeHtml(r.sku_name)}`,
         `<span class="num">${fmtQty(r.requested_qty)}</span>`, `<span class="num">${fmtQty(r.actual_qty)}</span>`,
         `<span class="num" style="color:var(--discrepancy)">${r.variance > 0 ? '+' : ''}${fmtQty(r.variance)}</span>`]),
     );
   } else if (kind === 'lowstock') {
     body.innerHTML = tableHtml(
       [t('colSku'), t('colName'), t('colCategory'), t('colOnHand'), t('colThreshold')],
-      rows.map((r) => [r.sku_code, r.name, catLabel(r.category), `<span class="num">${fmtQty(r.on_hand)} ${r.base_uom}</span>`, `<span class="num">${fmtQty(r.min_threshold)}</span>`]),
+      rows.map((r) => [escapeHtml(r.sku_code), escapeHtml(r.name), escapeHtml(catLabel(r.category)), `<span class="num">${fmtQty(r.on_hand)} ${escapeHtml(r.base_uom)}</span>`, `<span class="num">${fmtQty(r.min_threshold)}</span>`]),
     );
   } else if (kind === 'requests') {
     body.innerHTML = tableHtml(
       [t('colWhen'), t('colRequest'), t('colRequester'), t('colDepartment'), t('colWorkArea'), t('colItem'), t('colComment'), t('colStatus')],
       rows.map((r) => [
-        fmtDateTime(r.created_at), r.request_code, r.requester_name, r.department || t('noDepartment'),
-        r.work_area || '—',
-        r.skus ? `${r.skus.sku_code} — ${r.skus.name}${r.qty_requested ? ` (${fmtQty(r.qty_requested)} ${r.skus.base_uom || ''})` : ''}` : t('generalRequest'),
-        r.notes || '—',
+        fmtDateTime(r.created_at), escapeHtml(r.request_code), escapeHtml(r.requester_name), r.department ? escapeHtml(r.department) : t('noDepartment'),
+        r.work_area ? escapeHtml(r.work_area) : '—',
+        r.skus ? `${escapeHtml(r.skus.sku_code)} — ${escapeHtml(r.skus.name)}${r.qty_requested ? ` (${fmtQty(r.qty_requested)} ${escapeHtml(r.skus.base_uom || '')})` : ''}` : t('generalRequest'),
+        r.notes ? escapeHtml(r.notes) : '—',
         `<span class="chip ${statusChipClass(r.status)}">${statusLabel(r.status)}</span>`,
       ]),
     );
