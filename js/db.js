@@ -225,6 +225,23 @@ const DB = {
     return data;
   },
 
+  // ---- Buildings --------------------------------------------------------------
+  // Backs the Building dropdown on both request forms — unlike departments
+  // above, open to anon too (see "buildings" RLS in schema.sql), since an
+  // anonymous requester in a building not yet listed shouldn't be blocked
+  // from adding it.
+  async listBuildings() {
+    const { data, error } = await supabaseClient.from('buildings').select('*').order('name');
+    if (error) throw error;
+    return data;
+  },
+
+  async createBuilding(name) {
+    const { data, error } = await supabaseClient.from('buildings').insert({ name }).select().single();
+    if (error) throw error;
+    return data;
+  },
+
   // ---- Stock (views) -------------------------------------------------------
   async stockBySku() {
     const { data, error } = await supabaseClient.from('stock_by_sku').select('*').order('sku_code');
@@ -319,13 +336,14 @@ const DB = {
   // items is a list of { skuId, qty } (like createPublicRequest below) — a
   // comment-only submission (no items) is also valid. Returns an array:
   // one row per item, all sharing one request_code.
-  async createRequest({ items, comment, neededBy, requesterName, department }) {
+  async createRequest({ items, comment, neededBy, requesterName, department, building }) {
     const { data, error } = await supabaseClient.rpc('create_authenticated_request', {
       p_items: items && items.length ? items.map((i) => ({ sku_id: i.skuId, qty: i.qty })) : null,
       p_comment: comment || null,
       p_needed_by: neededBy || null,
       p_requester_name: requesterName || null,
       p_department: department || null,
+      p_building: building || null,
     });
     if (error) throw error;
     return data;
@@ -349,14 +367,23 @@ const DB = {
   // system the same way lot/SKU codes are (see schema.sql). Returns an
   // array: one row per item, all sharing one request_code (or a single
   // row for a comment-only submission).
-  async createPublicRequest({ requesterName, department, comment, workArea, items }) {
+  async createPublicRequest({ requesterName, department, comment, workArea, items, building }) {
     const { data, error } = await supabaseClient.rpc('create_public_request', {
       p_requester_name: requesterName,
       p_department: department || null,
       p_comment: comment || null,
       p_work_area: workArea,
       p_items: items && items.length ? items.map((i) => ({ sku_id: i.skuId, qty: i.qty })) : null,
+      p_building: building || null,
     });
+    if (error) throw error;
+    return data;
+  },
+
+  // "Top area needing maintenance" — count of distinct submissions per
+  // building, most-requested first. See building_report in schema.sql.
+  async buildingReport() {
+    const { data, error } = await supabaseClient.from('building_report').select('*');
     if (error) throw error;
     return data;
   },

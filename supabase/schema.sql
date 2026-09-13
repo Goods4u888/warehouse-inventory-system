@@ -178,6 +178,26 @@ select distinct department from user_profiles where department is not null and d
 on conflict (name) do nothing;
 
 -- ----------------------------------------------------------------------------
+-- 1e. Buildings — reference table backing the new "Building" dropdown on
+--     both request forms (the anonymous public form and the authenticated
+--     New Request flow), alongside the existing free-text work_area detail
+--     field (e.g. "3rd floor restroom") — building is the coarser,
+--     reportable category ("Building A"), work_area is the finer detail.
+--     Feeds building_report (section 6 below): count of requests per
+--     building, for a "which area needs maintenance most" view. Unlike
+--     departments above (staff/admin only), anyone can add a new building
+--     from either request form — a building name is no more sensitive than
+--     the free text work_area already lets anyone type unmoderated today,
+--     and keeping it open means an anonymous requester in a building not
+--     yet listed isn't blocked.
+-- ----------------------------------------------------------------------------
+create table if not exists buildings (
+  id          uuid primary key default gen_random_uuid(),
+  name        text unique not null,
+  created_at  timestamptz not null default now()
+);
+
+-- ----------------------------------------------------------------------------
 -- 2. Lots — LEGACY as of 2026-09-08. Originally one row per receiving
 --    event, with its own QR sticker per batch. The system now uses one
 --    permanent QR sticker per ITEM instead (see skus.qty_on_hand and the
@@ -290,6 +310,14 @@ alter table requests add column if not exists department text;
 -- column itself stays nullable so rows created before this field existed
 -- aren't left with a constraint they can't satisfy.
 alter table requests add column if not exists work_area text;
+
+-- The coarser, reportable counterpart to work_area above — picked from the
+-- buildings dropdown (see "1e. Buildings"), not typed freely, so it can
+-- actually be aggregated (building_report, section 6). Optional on both
+-- request forms — unlike work_area, not required, since the report just
+-- treats "no building given" as its own bucket rather than blocking
+-- submission over it.
+alter table requests add column if not exists building text;
 
 -- Real identity, added alongside the role system (see "1c. User profiles"
 -- above). Both nullable: neither the anonymous public form nor
@@ -550,6 +578,21 @@ join requests r on r.id = d.request_id
 join transactions t on t.id = d.transaction_id
 join skus s on s.id = t.sku_id
 order by d.created_at desc;
+
+-- Which building/area asks for maintenance most — counts distinct
+-- request_code (a submission), not raw rows, since a multi-item request
+-- shares one request_code across several rows and would otherwise be
+-- counted once per item instead of once per actual ask.
+drop view if exists building_report;
+create view building_report as
+select
+  building,
+  count(distinct request_code) as request_count,
+  max(created_at) as last_requested_at
+from requests
+where building is not null
+group by building
+order by request_count desc;
 
 -- ----------------------------------------------------------------------------
 -- 7. RPCs — the two writes that must be atomic
@@ -863,17 +906,22 @@ $$;
 -- pending -> preparing -> ready -> fulfilled independently, which matches
 -- how a warehouse actually picks a multi-item order: one line at a time,
 -- not all-or-nothing.
--- v2.3 (current): (name, department, comment, work_area, items jsonb) —
--- adds the required "what area/job is this for" line the printed slip
--- always carries (see the work_area column above and request.html's print
+-- v2.3: (name, department, comment, work_area, items jsonb) — adds the
+-- required "what area/job is this for" line the printed slip always
+-- carries (see the work_area column above and request.html's print
 -- layout), copied onto every row the same way the comment already is.
+-- v2.4 (current): adds p_building — the coarser, dropdown-picked
+-- counterpart to work_area (see "1e. Buildings" above), feeding
+-- building_report. Optional: unlike work_area, a missing building doesn't
+-- block submission.
 drop function if exists create_public_request(text, text, text);
 drop function if exists create_public_request(text, text, text, uuid, numeric);
 drop function if exists create_public_request(text, text, text, jsonb);
+drop function if exists create_public_request(text, text, text, text, jsonb);
 
 create or replace function create_public_request(
   p_requester_name text, p_department text, p_comment text, p_work_area text,
-  p_items jsonb default null
+  p_items jsonb default null, p_building text default null
 ) returns setof requests
 language plpgsql
 security definer
@@ -889,6 +937,7 @@ declare
   v_item_count int;
   v_notes text;
   v_work_area text;
+  v_building text;
 begin
   if coalesce(trim(p_requester_name), '') = '' then
     raise exception 'Requester name is required';
@@ -898,6 +947,8 @@ begin
   if v_work_area is null then
     raise exception 'Please describe the area or job this is for';
   end if;
+
+  v_building := nullif(trim(p_building), '');
 
   v_item_count := coalesce(jsonb_array_length(p_items), 0);
   v_notes := nullif(trim(p_comment), '');
@@ -929,19 +980,19 @@ begin
 
   if v_item_count = 0 then
     -- comment-only request: a single row, same as before v2.2
-    insert into requests (request_code, requester_name, department, notes, work_area)
-    values (v_code, trim(p_requester_name), nullif(trim(p_department), ''), v_notes, v_work_area)
+    insert into requests (request_code, requester_name, department, notes, work_area, building)
+    values (v_code, trim(p_requester_name), nullif(trim(p_department), ''), v_notes, v_work_area, v_building)
     returning * into v_row;
     return next v_row;
   else
-    -- one row per item, all sharing v_code; the comment and work_area (if
-    -- any) are copied onto every row so they're visible regardless of which
-    -- item card staff happen to be looking at.
+    -- one row per item, all sharing v_code; the comment, work_area, and
+    -- building (if any) are copied onto every row so they're visible
+    -- regardless of which item card staff happen to be looking at.
     for v_item in select * from jsonb_array_elements(p_items) loop
       v_sku_id := (v_item->>'sku_id')::uuid;
       v_qty := (v_item->>'qty')::numeric;
-      insert into requests (request_code, requester_name, department, sku_id, qty_requested, notes, work_area)
-      values (v_code, trim(p_requester_name), nullif(trim(p_department), ''), v_sku_id, v_qty, v_notes, v_work_area)
+      insert into requests (request_code, requester_name, department, sku_id, qty_requested, notes, work_area, building)
+      values (v_code, trim(p_requester_name), nullif(trim(p_department), ''), v_sku_id, v_qty, v_notes, v_work_area, v_building)
       returning * into v_row;
       return next v_row;
     end loop;
@@ -966,20 +1017,22 @@ $$;
 -- their own rows); running as the function owner lets this one narrow,
 -- parameter-controlled insert through without widening that policy.
 --
--- v2 (current): p_sku_id/p_qty/p_notes -> p_items jsonb (a *list* of items,
--- each {"sku_id": "...", "qty": n}) + p_comment — same "multiple items
--- plus a shared comment" shape as create_public_request() above, and
--- reuses its exact validation loop and per-item insert pattern (one row
--- per item, all sharing one request_code; a comment-only submission with
--- no items still writes a single row). Deliberately does NOT check current
--- stock quantity/availability anywhere — same as before, and same as
+-- v2: p_sku_id/p_qty/p_notes -> p_items jsonb (a *list* of items, each
+-- {"sku_id": "...", "qty": n}) + p_comment — same "multiple items plus a
+-- shared comment" shape as create_public_request() above, and reuses its
+-- exact validation loop and per-item insert pattern (one row per item, all
+-- sharing one request_code; a comment-only submission with no items still
+-- writes a single row). Deliberately does NOT check current stock
+-- quantity/availability anywhere — same as before, and same as
 -- create_public_request(): a request never reserves or blocks on stock on
 -- hand, a human decides feasibility at fulfillment time.
+-- v3 (current): adds p_building, same as create_public_request() above.
 drop function if exists create_authenticated_request(uuid, numeric, date, text, text, text);
+drop function if exists create_authenticated_request(jsonb, text, date, text, text);
 
 create or replace function create_authenticated_request(
   p_items jsonb default null, p_comment text default null, p_needed_by date default null,
-  p_requester_name text default null, p_department text default null
+  p_requester_name text default null, p_department text default null, p_building text default null
 ) returns setof requests
 language plpgsql
 security definer
@@ -998,7 +1051,9 @@ declare
   v_name text;
   v_dept text;
   v_requester_user_id uuid;
+  v_building text;
 begin
+  v_building := nullif(trim(p_building), '');
   select * into v_profile from user_profiles where id = auth.uid();
   if not found then
     raise exception 'No profile found for this account';
@@ -1041,16 +1096,16 @@ begin
   v_code := next_request_code();
 
   if v_item_count = 0 then
-    insert into requests (request_code, requester_name, department, notes, needed_by, requester_user_id)
-    values (v_code, v_name, v_dept, v_notes, p_needed_by, v_requester_user_id)
+    insert into requests (request_code, requester_name, department, notes, needed_by, requester_user_id, building)
+    values (v_code, v_name, v_dept, v_notes, p_needed_by, v_requester_user_id, v_building)
     returning * into v_row;
     return next v_row;
   else
     for v_item in select * from jsonb_array_elements(p_items) loop
       v_sku_id := (v_item->>'sku_id')::uuid;
       v_qty := (v_item->>'qty')::numeric;
-      insert into requests (request_code, requester_name, department, sku_id, qty_requested, needed_by, notes, requester_user_id)
-      values (v_code, v_name, v_dept, v_sku_id, v_qty, p_needed_by, v_notes, v_requester_user_id)
+      insert into requests (request_code, requester_name, department, sku_id, qty_requested, needed_by, notes, requester_user_id, building)
+      values (v_code, v_name, v_dept, v_sku_id, v_qty, p_needed_by, v_notes, v_requester_user_id, v_building)
       returning * into v_row;
       return next v_row;
     end loop;
@@ -1151,9 +1206,9 @@ revoke execute on function receive_stock(uuid, numeric, text, text, text, text[]
 revoke execute on function return_stock(uuid, numeric, text, text, text, text[]) from public;
 revoke execute on function issue_stock(uuid, uuid, numeric, text, text[]) from public;
 revoke execute on function create_sku(text, text, text, text, numeric, numeric, text[]) from public;
-revoke execute on function create_public_request(text, text, text, text, jsonb) from public;
+revoke execute on function create_public_request(text, text, text, text, jsonb, text) from public;
 revoke execute on function next_request_code() from public;
-revoke execute on function create_authenticated_request(jsonb, text, date, text, text) from public;
+revoke execute on function create_authenticated_request(jsonb, text, date, text, text, text) from public;
 revoke execute on function set_request_status(uuid, text) from public;
 revoke execute on function is_staff_or_admin() from public;
 revoke execute on function is_admin() from public;
@@ -1164,9 +1219,9 @@ grant execute on function receive_stock(uuid, numeric, text, text, text, text[])
 grant execute on function return_stock(uuid, numeric, text, text, text, text[]) to authenticated;
 grant execute on function issue_stock(uuid, uuid, numeric, text, text[]) to authenticated;
 grant execute on function create_sku(text, text, text, text, numeric, numeric, text[]) to authenticated;
-grant execute on function create_public_request(text, text, text, text, jsonb) to anon, authenticated;
+grant execute on function create_public_request(text, text, text, text, jsonb, text) to anon, authenticated;
 grant execute on function next_request_code() to authenticated;
-grant execute on function create_authenticated_request(jsonb, text, date, text, text) to authenticated;
+grant execute on function create_authenticated_request(jsonb, text, date, text, text, text) to authenticated;
 grant execute on function set_request_status(uuid, text) to authenticated;
 -- Called from inside policy expressions (section 8), evaluated as the
 -- querying role — authenticated needs EXECUTE for those policies to work.
@@ -1201,6 +1256,7 @@ alter table categories enable row level security;
 alter table departments enable row level security;
 alter table transaction_images enable row level security;
 alter table sku_images enable row level security;
+alter table buildings enable row level security;
 alter table request_sequences enable row level security;
 alter table user_profiles enable row level security;
 
@@ -1288,6 +1344,17 @@ create policy "staff and admin full access - categories" on categories for all t
 drop policy if exists "staff and admin full access - departments" on departments;
 create policy "staff and admin full access - departments" on departments for all to authenticated
   using (is_staff_or_admin()) with check (is_staff_or_admin());
+
+-- buildings: deliberately open, unlike departments above — a building name
+-- is no more sensitive than the free-text work_area anyone can already
+-- type unmoderated on the public request form, and anon needs to both read
+-- (populate the dropdown) and add (a requester in a building not yet
+-- listed shouldn't be blocked). No update/delete policy: the app never
+-- edits or removes a building once added, same as categories.
+drop policy if exists "anyone can view buildings" on buildings;
+drop policy if exists "anyone can add buildings" on buildings;
+create policy "anyone can view buildings" on buildings for select to anon, authenticated using (true);
+create policy "anyone can add buildings" on buildings for insert to anon, authenticated with check (true);
 
 -- transaction_images: evidence photos, written only by
 -- insert_transaction_images() (called from receive_stock/return_stock/

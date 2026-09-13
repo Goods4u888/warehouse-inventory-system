@@ -1385,6 +1385,42 @@ document.getElementById('btn-new-request').addEventListener('click', openNewRequ
 // Stock) instead of a fresh catalog fetch and an `nr-` id prefix so it
 // can't collide with request.html's own copy of these same ids.
 let nrItems = [];
+let nrBuildings = [];
+
+async function loadNrBuildings() {
+  try {
+    nrBuildings = await DB.listBuildings();
+    renderNrBuildingOptions();
+  } catch (err) {
+    toast(err.message || 'Could not load buildings', 'error');
+  }
+}
+function renderNrBuildingOptions(selected = '') {
+  const sel = document.getElementById('nr-building');
+  if (!sel) return;
+  const current = selected || sel.value;
+  sel.innerHTML = `
+    <option value="">${t('noBuilding')}</option>
+    ${nrBuildings.map((b) => `<option value="${escapeHtml(b.name)}" ${b.name === current ? 'selected' : ''}>${escapeHtml(b.name)}</option>`).join('')}
+  `;
+}
+async function onAddNrBuilding(newInput, newRow) {
+  const name = newInput.value.trim();
+  const errEl = document.getElementById('nr-error');
+  errEl.innerHTML = '';
+  if (!name) return;
+  try {
+    await DB.createBuilding(name);
+    nrBuildings = await DB.listBuildings();
+    renderNrBuildingOptions(name);
+    newInput.value = '';
+    newRow.hidden = true;
+    toast(t('toastBuildingAdded'), 'success');
+  } catch (err) {
+    const msg = /duplicate|unique/i.test(err.message || '') ? t('errorBuildingExists') : (err.message || 'Could not add building');
+    errEl.innerHTML = `<div class="form-error">${escapeHtml(msg)}</div>`;
+  }
+}
 
 function openNewRequestSheet() {
   nrItems = [];
@@ -1417,6 +1453,18 @@ function openNewRequestSheet() {
         <input type="date" id="nr-needed">
       </div>
       <div class="field">
+        <label for="nr-building">${t('fieldBuilding')}</label>
+        <div class="field-with-btn">
+          <select id="nr-building"></select>
+          <button type="button" class="btn-icon-add" id="nr-building-add-btn" title="${t('addBuildingTitle')}" aria-label="${t('addBuildingTitle')}">${icon('plusCircle', 18)}</button>
+        </div>
+        <div class="new-category-row" id="nr-building-new-row" hidden>
+          <input type="text" id="nr-building-new-input" placeholder="${t('newBuildingPlaceholder')}">
+          <button type="button" class="btn btn-outline btn-sm" id="nr-building-new-confirm">${icon('check', 14)}<span>${t('add')}</span></button>
+          <button type="button" class="btn btn-ghost btn-sm" id="nr-building-new-cancel">${icon('xCircle', 14)}</button>
+        </div>
+      </div>
+      <div class="field">
         <label for="nr-comment">${t('fieldComment')}</label>
         <textarea id="nr-comment" placeholder="${escapeHtml(t('fieldCommentPh'))}" style="min-height:100px"></textarea>
         <p class="field-hint" id="nr-comment-hint">${t('fieldCommentHint')}</p>
@@ -1426,7 +1474,23 @@ function openNewRequestSheet() {
   `);
   applyStaticIcons();
   renderNrItemList();
+  loadNrBuildings();
   document.getElementById('nr-item-search').addEventListener('input', renderNrItemResults);
+  const nrBuildingAddBtn = document.getElementById('nr-building-add-btn');
+  const nrBuildingNewRow = document.getElementById('nr-building-new-row');
+  const nrBuildingNewInput = document.getElementById('nr-building-new-input');
+  nrBuildingAddBtn.addEventListener('click', () => {
+    nrBuildingNewRow.hidden = !nrBuildingNewRow.hidden;
+    if (!nrBuildingNewRow.hidden) nrBuildingNewInput.focus();
+  });
+  document.getElementById('nr-building-new-cancel').addEventListener('click', () => {
+    nrBuildingNewInput.value = '';
+    nrBuildingNewRow.hidden = true;
+  });
+  document.getElementById('nr-building-new-confirm').addEventListener('click', () => onAddNrBuilding(nrBuildingNewInput, nrBuildingNewRow));
+  nrBuildingNewInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); onAddNrBuilding(nrBuildingNewInput, nrBuildingNewRow); }
+  });
   document.getElementById('form-new-request').addEventListener('submit', async (e) => {
     e.preventDefault();
     const errEl = document.getElementById('nr-error');
@@ -1451,6 +1515,7 @@ function openNewRequestSheet() {
         comment: comment || null,
         neededBy: document.getElementById('nr-needed').value,
         requesterName: showRequesterField ? document.getElementById('nr-requester').value.trim() : '',
+        building: document.getElementById('nr-building').value.trim() || null,
       });
       Sheet.close();
       toast(t('toastRequestSubmitted'), 'success');
@@ -1564,6 +1629,7 @@ function reportSearchFields(kind) {
     movement: ['sku_code', 'sku_name', 'performed_by', 'request_code', 'type'],
     discrepancy: ['request_code', 'requester_name', 'sku_code', 'sku_name'],
     lowstock: ['sku_code', 'name', 'category'],
+    building: ['building'],
   }[kind] || [];
 }
 
@@ -1576,6 +1642,7 @@ async function loadReport(kind) {
     else if (kind === 'requests') reportRawRows = await DB.listRequests();
     else if (kind === 'discrepancy') reportRawRows = await DB.discrepancyReport();
     else if (kind === 'lowstock') reportRawRows = await DB.lowStock();
+    else if (kind === 'building') reportRawRows = await DB.buildingReport();
     renderReportTable(kind);
   } catch (err) {
     body.innerHTML = '';
@@ -1618,6 +1685,7 @@ function renderReportTable(kind) {
     if (kind === 'discrepancy') { body.innerHTML = `<div class="empty"><p>${t('emptyDiscrepancies')}</p></div>`; return; }
     if (kind === 'lowstock') { body.innerHTML = `<div class="empty"><p>${t('emptyLowStock')}</p></div>`; return; }
     if (kind === 'requests') { body.innerHTML = `<div class="empty"><p>${t('emptyGeneric')}</p></div>`; return; }
+    if (kind === 'building') { body.innerHTML = `<div class="empty"><p>${t('emptyBuildingReport')}</p></div>`; return; }
   }
 
   if (kind === 'stock') {
@@ -1662,6 +1730,11 @@ function renderReportTable(kind) {
         r.notes || '—',
         `<span class="chip ${statusChipClass(r.status)}">${statusLabel(r.status)}</span>`,
       ]),
+    );
+  } else if (kind === 'building') {
+    body.innerHTML = tableHtml(
+      ['#', t('colBuilding'), t('colRequestCount'), t('colLastRequested')],
+      rows.map((r, i) => [i + 1, escapeHtml(r.building), `<span class="num">${fmtQty(r.request_count)}</span>`, fmtDate(r.last_requested_at)]),
     );
   }
 }

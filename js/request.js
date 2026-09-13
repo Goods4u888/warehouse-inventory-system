@@ -34,13 +34,14 @@ function showFormView() {
   document.getElementById('view-confirm').hidden = true;
 }
 
-function showConfirmView({ requestCode, createdAt, requesterName, department, workArea, items: submittedItems, comment }) {
+function showConfirmView({ requestCode, createdAt, requesterName, department, workArea, building, items: submittedItems, comment }) {
   document.getElementById('view-form').hidden = true;
   document.getElementById('view-confirm').hidden = false;
   document.getElementById('confirm-code').textContent = requestCode;
   document.getElementById('confirm-name').textContent = requesterName;
   document.getElementById('confirm-department').textContent = department || t('noDepartment');
   document.getElementById('confirm-workarea').textContent = workArea;
+  document.getElementById('confirm-building').textContent = building || t('noBuilding');
   document.getElementById('confirm-when').textContent = fmtDateTime(createdAt);
 
   const itemsBlock = document.getElementById('confirm-items-block');
@@ -70,19 +71,20 @@ function showConfirmView({ requestCode, createdAt, requesterName, department, wo
     commentEl.textContent = '';
   }
 
-  renderPrintSheet({ requestCode, createdAt, requesterName, department, workArea, items: submittedItems, comment });
+  renderPrintSheet({ requestCode, createdAt, requesterName, department, workArea, building, items: submittedItems, comment });
 }
 
 // The printable/PDF form (see .print-sheet in request.html) — a numbered
 // item table plus 4 blank signature boxes, modeled on the paper requisition
 // slip this replaces. Populated once at confirm time; nothing here is
 // interactive, it only ever needs to exist for window.print().
-function renderPrintSheet({ requestCode, createdAt, requesterName, department, workArea, items: submittedItems, comment }) {
+function renderPrintSheet({ requestCode, createdAt, requesterName, department, workArea, building, items: submittedItems, comment }) {
   document.getElementById('print-code').textContent = requestCode;
   document.getElementById('print-date').textContent = fmtDateTime(createdAt);
   document.getElementById('print-department').textContent = department || t('noDepartment');
   document.getElementById('print-name').textContent = requesterName;
   document.getElementById('print-workarea').textContent = workArea;
+  document.getElementById('print-building').textContent = building || t('noBuilding');
   // Repeats at the bottom of every printed page (see .print-sheet-footer) so
   // a multi-page slip stays identifiable if pages get separated.
   document.getElementById('print-footer').textContent = t('printFooterNote', requestCode);
@@ -214,6 +216,63 @@ function updateCommentRequirement() {
   hint.hidden = items.length > 0;
 }
 
+// ---- Building dropdown ---------------------------------------------------
+// Same "reference table + inline add" pattern as Manage Staff's department
+// dropdown (js/app.js), but open to anon here (see "buildings" RLS in
+// schema.sql) — a requester in a building not yet listed isn't blocked.
+let buildings = [];
+
+async function loadBuildings() {
+  try {
+    buildings = await DB.listBuildings();
+    renderBuildingOptions();
+  } catch (_) {
+    // Dropdown just comes up empty (only the "—" option) — same silent
+    // fallback as loadItems() above, since this page has no toast() helper.
+  }
+}
+function renderBuildingOptions(selected = '') {
+  const sel = document.getElementById('req-building');
+  const current = selected || sel.value;
+  sel.innerHTML = `
+    <option value="">${t('noBuilding')}</option>
+    ${buildings.map((b) => `<option value="${escapeHtml(b.name)}" ${b.name === current ? 'selected' : ''}>${escapeHtml(b.name)}</option>`).join('')}
+  `;
+}
+async function onAddBuilding(newInput, newRow) {
+  const name = newInput.value.trim();
+  const errEl = document.getElementById('request-error');
+  errEl.innerHTML = '';
+  if (!name) return;
+  try {
+    await DB.createBuilding(name);
+    buildings = await DB.listBuildings();
+    renderBuildingOptions(name);
+    newInput.value = '';
+    newRow.hidden = true;
+  } catch (err) {
+    const msg = /duplicate|unique/i.test(err.message || '') ? t('errorBuildingExists') : (err.message || 'Could not add building');
+    errEl.innerHTML = `<div class="form-error">${escapeHtml(msg)}</div>`;
+  }
+}
+(() => {
+  const addBtn = document.getElementById('req-building-add-btn');
+  const newRow = document.getElementById('req-building-new-row');
+  const newInput = document.getElementById('req-building-new-input');
+  addBtn.addEventListener('click', () => {
+    newRow.hidden = !newRow.hidden;
+    if (!newRow.hidden) newInput.focus();
+  });
+  document.getElementById('req-building-new-cancel').addEventListener('click', () => {
+    newInput.value = '';
+    newRow.hidden = true;
+  });
+  document.getElementById('req-building-new-confirm').addEventListener('click', () => onAddBuilding(newInput, newRow));
+  newInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); onAddBuilding(newInput, newRow); }
+  });
+})();
+
 document.getElementById('req-item-search').addEventListener('input', renderItemResults);
 
 document.getElementById('form-public-request').addEventListener('submit', async (e) => {
@@ -238,6 +297,7 @@ document.getElementById('form-public-request').addEventListener('submit', async 
   const requesterName = document.getElementById('req-name').value.trim();
   const department = document.getElementById('req-department').value.trim();
   const workArea = document.getElementById('req-workarea').value.trim();
+  const building = document.getElementById('req-building').value.trim();
 
   const btn = document.getElementById('req-submit');
   btn.disabled = true;
@@ -247,6 +307,7 @@ document.getElementById('form-public-request').addEventListener('submit', async 
       department,
       comment: comment || null,
       workArea,
+      building: building || null,
       items: items.map((it) => ({ skuId: it.id, qty: Number(it.qty) })),
     });
     const first = Array.isArray(rows) ? rows[0] : rows; // fake-client / real client both hand back the RPC's rows
@@ -256,6 +317,7 @@ document.getElementById('form-public-request').addEventListener('submit', async 
       requesterName,
       department,
       workArea,
+      building,
       items,
       comment,
     });
@@ -282,3 +344,4 @@ I18n.applyStatic();
 applyStaticIcons();
 updateCommentRequirement();
 loadItems();
+loadBuildings();

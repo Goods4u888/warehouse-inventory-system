@@ -142,6 +142,15 @@ const I18N = {
     newDepartmentPlaceholder: 'New department name',
     toastDepartmentAdded: 'Department added',
     errorDepartmentExists: 'That department already exists',
+    fieldBuilding: 'Building (optional)',
+    noBuilding: '—',
+    addBuildingTitle: 'Add a new building',
+    newBuildingPlaceholder: 'New building name',
+    toastBuildingAdded: 'Building added',
+    errorBuildingExists: 'That building already exists',
+    reportBuilding: 'Top areas',
+    colBuilding: 'Building', colRequestCount: 'Requests', colLastRequested: 'Last requested',
+    emptyBuildingReport: 'No requests have a building yet.',
 
     // Landing page
     landingTitle: 'Warehouse Inventory',
@@ -386,6 +395,15 @@ const I18N = {
     newDepartmentPlaceholder: 'ชื่อแผนกใหม่',
     toastDepartmentAdded: 'เพิ่มแผนกแล้ว',
     errorDepartmentExists: 'มีแผนกนี้อยู่แล้ว',
+    fieldBuilding: 'อาคาร (ถ้ามี)',
+    noBuilding: '—',
+    addBuildingTitle: 'เพิ่มอาคารใหม่',
+    newBuildingPlaceholder: 'ชื่ออาคารใหม่',
+    toastBuildingAdded: 'เพิ่มอาคารแล้ว',
+    errorBuildingExists: 'มีอาคารนี้อยู่แล้ว',
+    reportBuilding: 'พื้นที่ที่ขอมากที่สุด',
+    colBuilding: 'อาคาร', colRequestCount: 'จำนวนคำขอ', colLastRequested: 'ขอล่าสุดเมื่อ',
+    emptyBuildingReport: 'ยังไม่มีคำขอที่ระบุอาคาร',
 
     // Landing page
     landingTitle: 'ระบบคลังวัสดุ',
