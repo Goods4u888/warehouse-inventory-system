@@ -8,6 +8,17 @@ const supabaseClient = window.supabase.createClient(
   window.APP_CONFIG.SUPABASE_ANON_KEY
 );
 
+// A sku row fetched with the sku_images(storage_path) embed carries a
+// nested sku_images: [{storage_path}] array from PostgREST — flatten that
+// into a plain image_paths: string[] so every caller (list cards, item
+// search, item detail) can read the same shape regardless of whether the
+// row came from this embed or from a view that already aggregates it
+// (stock_by_sku.image_paths).
+function normalizeSkuImages(sku) {
+  const { sku_images, ...rest } = sku;
+  return { ...rest, image_paths: (sku_images || []).map((si) => si.storage_path) };
+}
+
 // ---- Admin auth -----------------------------------------------------------
 // admin.html is gated by real per-person Supabase Auth accounts (Requester /
 // Staff / Admin — see the user_profiles table in schema.sql), each created
@@ -93,12 +104,18 @@ const DB = {
   },
 
   // ---- SKUs ---------------------------------------------------------------
+  // sku_images(storage_path) is a PostgREST embed over the real FK
+  // (sku_images.sku_id references skus.id) — normalized below into a flat
+  // image_paths: string[] on every row, so callers never need to know
+  // whether a given sku came from this embed or from a view that already
+  // aggregates it (like stock_by_sku.image_paths) — both end up the same
+  // shape.
   async listSkus({ activeOnly = true } = {}) {
-    let q = supabaseClient.from('skus').select('*').order('name');
+    let q = supabaseClient.from('skus').select('*, sku_images(storage_path)').order('name');
     if (activeOnly) q = q.eq('is_active', true);
     const { data, error } = await q;
     if (error) throw error;
-    return data;
+    return data.map(normalizeSkuImages);
   },
 
   // Used by the public request form's item search. anon can only ever see
@@ -108,19 +125,20 @@ const DB = {
   async listActiveSkusForRequest() {
     const { data, error } = await supabaseClient
       .from('skus')
-      .select('id, sku_code, name, category, base_uom, image_path')
+      .select('id, sku_code, name, category, base_uom, sku_images(storage_path)')
       .eq('is_active', true)
       .order('name');
     if (error) throw error;
-    return data;
+    return data.map(normalizeSkuImages);
   },
 
   // sku_code is assigned by the system (random 3-letter prefix + running
   // number, e.g. "QZT-001") — create_sku() generates it server-side, so it's
-  // never part of the payload the caller sends here. imagePath: already
+  // never part of the payload the caller sends here. imagePaths: already
   // uploaded to the public item-photos bucket by the caller (see
-  // uploadItemPhoto below) before this is called.
-  async createSku({ name, category, base_uom, alt_uom, conversion_factor, min_threshold, imagePath }) {
+  // uploadItemPhoto below) before this is called — an item can have more
+  // than one photo.
+  async createSku({ name, category, base_uom, alt_uom, conversion_factor, min_threshold, imagePaths }) {
     const { data, error } = await supabaseClient.rpc('create_sku', {
       p_name: name,
       p_category: category,
@@ -128,7 +146,7 @@ const DB = {
       p_alt_uom: alt_uom || null,
       p_conversion_factor: conversion_factor ?? null,
       p_min_threshold: min_threshold ?? 0,
-      p_image_path: imagePath || null,
+      p_image_paths: imagePaths && imagePaths.length ? imagePaths : null,
     });
     if (error) throw error;
     return data;
@@ -154,6 +172,21 @@ const DB = {
   getItemPhotoUrl(imagePath) {
     if (!imagePath) return null;
     return supabaseClient.storage.from('item-photos').getPublicUrl(imagePath).data.publicUrl;
+  },
+
+  // Replaces an existing item's whole photo set — simplest correct
+  // semantics for an edit form that shows "here's everything currently
+  // attached, add or remove freely": delete every row for this sku, then
+  // insert whatever the form's final list was. No UPDATE ever happens on a
+  // sku_images row (matches the RLS policy, which only grants insert/delete).
+  async setSkuImages(skuId, paths) {
+    const { error: delErr } = await supabaseClient.from('sku_images').delete().eq('sku_id', skuId);
+    if (delErr) throw delErr;
+    if (!paths.length) return;
+    const { error: insErr } = await supabaseClient
+      .from('sku_images')
+      .insert(paths.map((storage_path) => ({ sku_id: skuId, storage_path })));
+    if (insErr) throw insErr;
   },
 
   async updateSku(id, patch) {

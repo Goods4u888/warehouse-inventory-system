@@ -37,14 +37,42 @@ create table if not exists skus (
 comment on table skus is 'Item master. One row per material type (e.g. "Portland Cement 50kg").';
 comment on column skus.conversion_factor is 'How many base_uom in one alt_uom, e.g. 1 pallet = 50 bags -> 50.';
 
--- A product photo, optional, set from Manage Items. Unlike transaction
--- evidence (private bucket, staff/admin only), item photos live in a
--- PUBLIC bucket (item-photos, below) — they help a requester on the public
--- form recognize what they're picking, and a catalog photo isn't sensitive
--- the way a delivery/damage photo can be. Stores a Storage path, not a
--- full URL, same as transaction_images.storage_path — the app builds the
+-- Product photos, optional, set from Manage Items — an item can have more
+-- than one (v2, see migration below), so these live in their own table
+-- rather than a single skus.image_path column. Unlike transaction evidence
+-- (private bucket, staff/admin only), item photos live in a PUBLIC bucket
+-- (item-photos, below) — they help a requester on the public form
+-- recognize what they're picking, and a catalog photo isn't sensitive the
+-- way a delivery/damage photo can be. Stores a Storage path, not a full
+-- URL, same as transaction_images.storage_path — the app builds the
 -- public URL from it (DB.getItemPhotoUrl in js/db.js).
-alter table skus add column if not exists image_path text;
+create table if not exists sku_images (
+  id            uuid primary key default gen_random_uuid(),
+  sku_id        uuid not null references skus(id) on delete cascade,
+  storage_path  text not null,
+  created_at    timestamptz not null default now()
+);
+create index if not exists sku_images_sku_id_idx on sku_images(sku_id);
+
+-- v1 (through 2026-09-12): a single skus.image_path text column. Backfill
+-- into one sku_images row per item — guarded by information_schema so this
+-- is a no-op (and doesn't error trying to read a column that no longer
+-- exists) on every re-run after the first. The column itself isn't dropped
+-- here: stock_by_sku (section 6 below) still references it at this point
+-- in the file, and dropping a column a view depends on fails outright
+-- ("cannot drop column ... because other objects depend on it") — the
+-- actual `drop column` runs later, right after that view is redefined to
+-- stop referencing it. See the matching block below "6. Views".
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_name = 'skus' and column_name = 'image_path'
+  ) then
+    insert into sku_images (sku_id, storage_path)
+    select id, image_path from skus where image_path is not null;
+  end if;
+end $$;
 
 -- ----------------------------------------------------------------------------
 -- 1b. Categories — reference table backing the category dropdown in Manage
@@ -378,7 +406,7 @@ values ('transaction-evidence', 'transaction-evidence', false)
 on conflict (id) do nothing;
 
 -- item-photos: PUBLIC bucket for product photos set from Manage Items
--- (skus.image_path above) — deliberately the opposite trust boundary from
+-- (sku_images above) — deliberately the opposite trust boundary from
 -- transaction-evidence, since these help anyone on the public request form
 -- recognize an item and aren't sensitive. Public means reads need no
 -- policy at all (served straight from Storage's public URL endpoint,
@@ -428,7 +456,17 @@ create table if not exists request_sequences (
 -- 6. Views — current stock, read straight off skus.qty_on_hand as of
 --    2026-09-08 (previously summed from lots — see the "2. Lots" note).
 -- ----------------------------------------------------------------------------
-create or replace view stock_by_sku as
+-- Dropped and recreated (not create-or-replace): the old image_path column
+-- is renamed to image_paths (single photo -> array of photos), and Postgres
+-- refuses to CREATE OR REPLACE a view when that changes an existing
+-- column's name ("cannot change name of view column ... use ALTER VIEW ...
+-- RENAME COLUMN instead") — same reasoning already noted for
+-- movement_history above. low_stock depends on stock_by_sku, so it has to
+-- be dropped first and recreated after.
+drop view if exists low_stock;
+drop view if exists stock_by_sku;
+
+create view stock_by_sku as
 select
   s.id            as sku_id,
   s.sku_code,
@@ -438,12 +476,32 @@ select
   s.min_threshold,
   s.qty_on_hand                as on_hand,
   s.qty_on_hand < s.min_threshold as is_low,
-  s.image_path
+  coalesce(si.image_paths, array[]::text[]) as image_paths
 from skus s
+left join lateral (
+  select array_agg(storage_path order by created_at) as image_paths
+  from sku_images
+  where sku_id = s.id
+) si on true
 where s.is_active;
 
-create or replace view low_stock as
+create view low_stock as
 select * from stock_by_sku where is_low order by on_hand asc;
+
+-- Now safe to drop skus.image_path (see the backfill block under "1c" —
+-- stock_by_sku no longer references it as of the drop/recreate above, so
+-- this can't fail with "cannot drop column ... because other objects
+-- depend on it" the way it would if this ran before the view was fixed).
+-- Guarded the same way as the backfill: a no-op once the column is gone.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_name = 'skus' and column_name = 'image_path'
+  ) then
+    alter table skus drop column image_path;
+  end if;
+end $$;
 
 -- LEGACY — kept only so pre-migration batch history is still queryable by
 -- hand if ever needed; nothing in the app reads this view anymore (scanning
@@ -686,21 +744,43 @@ begin
 end;
 $$;
 
+-- Shared by create_sku() below and available for any future sku-photo
+-- write path — same pattern as insert_transaction_images() above, one
+-- small helper instead of repeating the loop.
+create or replace function insert_sku_images(p_sku_id uuid, p_image_paths text[]) returns void
+language plpgsql
+as $$
+declare
+  v_path text;
+begin
+  if p_image_paths is null then
+    return;
+  end if;
+  foreach v_path in array p_image_paths loop
+    if nullif(trim(v_path), '') is not null then
+      insert into sku_images (sku_id, storage_path) values (p_sku_id, v_path);
+    end if;
+  end loop;
+end;
+$$;
+
 -- Creating a new item: the SKU code is assigned by the system, not typed by
 -- staff — a random 3-letter prefix plus a running number for that prefix
 -- (see sku_sequences above). The existence check is just a belt-and-braces
 -- retry; in practice the sequence table already guarantees no collision.
--- p_image_path (added alongside item photos, see skus.image_path above):
--- the caller already uploaded the photo to the public item-photos bucket
--- before calling this, same "upload first, pass the path in" order as
--- evidence photos — a new item's id isn't known until this insert runs, so
--- the photo's path is a fresh random name, not keyed off the sku id.
+-- p_image_paths (v2 — an item can now have more than one photo, see
+-- sku_images above): the caller already uploaded each photo to the public
+-- item-photos bucket before calling this, same "upload first, pass the
+-- paths in" order as evidence photos — a new item's id isn't known until
+-- this insert runs, so each photo's path is a fresh random name, not keyed
+-- off the sku id.
 drop function if exists create_sku(text, text, text, text, numeric, numeric);
+drop function if exists create_sku(text, text, text, text, numeric, numeric, text);
 
 create or replace function create_sku(
   p_name text, p_category text, p_base_uom text,
   p_alt_uom text default null, p_conversion_factor numeric default null,
-  p_min_threshold numeric default 0, p_image_path text default null
+  p_min_threshold numeric default 0, p_image_paths text[] default null
 ) returns skus
 language plpgsql
 as $$
@@ -727,9 +807,11 @@ begin
     exit when not exists (select 1 from skus where sku_code = v_code);
   end loop;
 
-  insert into skus (sku_code, name, category, base_uom, alt_uom, conversion_factor, min_threshold, image_path)
-  values (v_code, p_name, p_category, p_base_uom, p_alt_uom, p_conversion_factor, p_min_threshold, p_image_path)
+  insert into skus (sku_code, name, category, base_uom, alt_uom, conversion_factor, min_threshold)
+  values (v_code, p_name, p_category, p_base_uom, p_alt_uom, p_conversion_factor, p_min_threshold)
   returning * into v_sku;
+
+  perform insert_sku_images(v_sku.id, p_image_paths);
 
   return v_sku;
 end;
@@ -1064,10 +1146,11 @@ $$;
 -- PUBLIC still covers it. Revoke PUBLIC explicitly, then grant only to the
 -- roles that should actually have it.
 revoke execute on function insert_transaction_images(uuid, text[]) from public;
+revoke execute on function insert_sku_images(uuid, text[]) from public;
 revoke execute on function receive_stock(uuid, numeric, text, text, text, text[]) from public;
 revoke execute on function return_stock(uuid, numeric, text, text, text, text[]) from public;
 revoke execute on function issue_stock(uuid, uuid, numeric, text, text[]) from public;
-revoke execute on function create_sku(text, text, text, text, numeric, numeric, text) from public;
+revoke execute on function create_sku(text, text, text, text, numeric, numeric, text[]) from public;
 revoke execute on function create_public_request(text, text, text, text, jsonb) from public;
 revoke execute on function next_request_code() from public;
 revoke execute on function create_authenticated_request(jsonb, text, date, text, text) from public;
@@ -1076,10 +1159,11 @@ revoke execute on function is_staff_or_admin() from public;
 revoke execute on function is_admin() from public;
 
 grant execute on function insert_transaction_images(uuid, text[]) to authenticated;
+grant execute on function insert_sku_images(uuid, text[]) to authenticated;
 grant execute on function receive_stock(uuid, numeric, text, text, text, text[]) to authenticated;
 grant execute on function return_stock(uuid, numeric, text, text, text, text[]) to authenticated;
 grant execute on function issue_stock(uuid, uuid, numeric, text, text[]) to authenticated;
-grant execute on function create_sku(text, text, text, text, numeric, numeric, text) to authenticated;
+grant execute on function create_sku(text, text, text, text, numeric, numeric, text[]) to authenticated;
 grant execute on function create_public_request(text, text, text, text, jsonb) to anon, authenticated;
 grant execute on function next_request_code() to authenticated;
 grant execute on function create_authenticated_request(jsonb, text, date, text, text) to authenticated;
@@ -1116,6 +1200,7 @@ alter table sku_sequences enable row level security;
 alter table categories enable row level security;
 alter table departments enable row level security;
 alter table transaction_images enable row level security;
+alter table sku_images enable row level security;
 alter table request_sequences enable row level security;
 alter table user_profiles enable row level security;
 
@@ -1171,6 +1256,21 @@ create policy "staff and admin can delete skus" on skus for delete to authentica
 -- only SELECT (no insert/update/delete), same "narrow surface" principle as
 -- create_public_request() above.
 create policy "anon can view active skus" on skus for select to anon using (is_active = true);
+
+-- sku_images: same shape as skus' own split above — anyone signed in can
+-- read (the catalog search everyone shares), anon can read only for active
+-- items, writes are staff/admin only. No UPDATE policy: the app always
+-- replaces an item's photo set by deleting then re-inserting rows
+-- (DB.setSkuImages in js/db.js), never updating one in place.
+drop policy if exists "authenticated can view sku_images" on sku_images;
+drop policy if exists "anon can view images for active skus" on sku_images;
+drop policy if exists "staff and admin can insert sku_images" on sku_images;
+drop policy if exists "staff and admin can delete sku_images" on sku_images;
+create policy "authenticated can view sku_images" on sku_images for select to authenticated using (true);
+create policy "anon can view images for active skus" on sku_images for select to anon
+  using (exists (select 1 from skus s where s.id = sku_images.sku_id and s.is_active = true));
+create policy "staff and admin can insert sku_images" on sku_images for insert to authenticated with check (is_staff_or_admin());
+create policy "staff and admin can delete sku_images" on sku_images for delete to authenticated using (is_staff_or_admin());
 
 -- categories: staff/admin only (Manage Items' category dropdown) — nothing
 -- a requester does ever reads this table directly; their item search reads
