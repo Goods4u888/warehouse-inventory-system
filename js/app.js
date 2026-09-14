@@ -1472,7 +1472,6 @@ document.getElementById('btn-new-request').addEventListener('click', openNewRequ
 let nrItems = [];
 let nrBuildings = [];
 let nrDepartments = [];
-let nrWorkAreas = [];
 
 async function loadNrBuildings() {
   try {
@@ -1552,40 +1551,6 @@ async function onAddNrDepartment(newInput, newRow) {
 // Building above, but unlike Department, shown to every role: it describes
 // where the work is, not an attribute of who's asking, so it's never
 // profile-derived. Required, same as on the public form.
-async function loadNrWorkAreas() {
-  try {
-    nrWorkAreas = await DB.listWorkAreas();
-    renderNrWorkAreaOptions();
-  } catch (err) {
-    toast(err.message || 'Could not load work areas', 'error');
-  }
-}
-function renderNrWorkAreaOptions(selected = '') {
-  const sel = document.getElementById('nr-workarea');
-  if (!sel) return;
-  const current = selected || sel.value;
-  sel.innerHTML = `
-    <option value="" disabled ${current ? '' : 'selected'}>${t('noWorkArea')}</option>
-    ${nrWorkAreas.map((w) => `<option value="${escapeHtml(w.name)}" ${w.name === current ? 'selected' : ''}>${escapeHtml(w.name)}</option>`).join('')}
-  `;
-}
-async function onAddNrWorkArea(newInput, newRow) {
-  const name = newInput.value.trim();
-  const errEl = document.getElementById('nr-error');
-  errEl.innerHTML = '';
-  if (!name) return;
-  try {
-    await DB.createWorkArea(name);
-    nrWorkAreas = await DB.listWorkAreas();
-    renderNrWorkAreaOptions(name);
-    newInput.value = '';
-    newRow.hidden = true;
-  } catch (err) {
-    const msg = /duplicate|unique/i.test(err.message || '') ? t('errorWorkAreaExists') : (err.message || 'Could not add area');
-    errEl.innerHTML = `<div class="form-error">${escapeHtml(msg)}</div>`;
-  }
-}
-
 // Shown inside the same Sheet right after a successful submit — same
 // "confirmation + Export PDF" shape as the public form's post-submit
 // screen (js/request.js showConfirmView()), adapted to this modal instead
@@ -1681,15 +1646,7 @@ function openNewRequestSheet() {
       </div>
       <div class="field">
         <label for="nr-workarea">${t('fieldWorkArea')}</label>
-        <div class="field-with-btn">
-          <select id="nr-workarea" required></select>
-          <button type="button" class="btn-icon-add" id="nr-workarea-add-btn" title="${t('addWorkAreaTitle')}" aria-label="${t('addWorkAreaTitle')}">${icon('plusCircle', 18)}</button>
-        </div>
-        <div class="new-category-row" id="nr-workarea-new-row" hidden>
-          <input type="text" id="nr-workarea-new-input" placeholder="${t('newWorkAreaPlaceholder')}">
-          <button type="button" class="btn btn-outline btn-sm" id="nr-workarea-new-confirm">${icon('check', 14)}<span>${t('add')}</span></button>
-          <button type="button" class="btn btn-ghost btn-sm" id="nr-workarea-new-cancel">${icon('xCircle', 14)}</button>
-        </div>
+        <input type="text" id="nr-workarea" placeholder="${escapeHtml(t('fieldWorkAreaPh'))}" required>
       </div>
       <div class="field">
         <label for="nr-building">${t('fieldBuilding')}</label>
@@ -1714,7 +1671,6 @@ function openNewRequestSheet() {
   applyStaticIcons();
   renderNrItemList();
   loadNrBuildings();
-  loadNrWorkAreas();
   document.getElementById('nr-item-search').addEventListener('input', renderNrItemResults);
   const nrBuildingAddBtn = document.getElementById('nr-building-add-btn');
   const nrBuildingNewRow = document.getElementById('nr-building-new-row');
@@ -1730,21 +1686,6 @@ function openNewRequestSheet() {
   document.getElementById('nr-building-new-confirm').addEventListener('click', () => onAddNrBuilding(nrBuildingNewInput, nrBuildingNewRow));
   nrBuildingNewInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); onAddNrBuilding(nrBuildingNewInput, nrBuildingNewRow); }
-  });
-  const nrWorkAreaAddBtn = document.getElementById('nr-workarea-add-btn');
-  const nrWorkAreaNewRow = document.getElementById('nr-workarea-new-row');
-  const nrWorkAreaNewInput = document.getElementById('nr-workarea-new-input');
-  nrWorkAreaAddBtn.addEventListener('click', () => {
-    nrWorkAreaNewRow.hidden = !nrWorkAreaNewRow.hidden;
-    if (!nrWorkAreaNewRow.hidden) nrWorkAreaNewInput.focus();
-  });
-  document.getElementById('nr-workarea-new-cancel').addEventListener('click', () => {
-    nrWorkAreaNewInput.value = '';
-    nrWorkAreaNewRow.hidden = true;
-  });
-  document.getElementById('nr-workarea-new-confirm').addEventListener('click', () => onAddNrWorkArea(nrWorkAreaNewInput, nrWorkAreaNewRow));
-  nrWorkAreaNewInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); onAddNrWorkArea(nrWorkAreaNewInput, nrWorkAreaNewRow); }
   });
   if (showRequesterField) {
     loadNrDepartments();
