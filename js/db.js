@@ -347,6 +347,34 @@ const DB = {
     return data;
   },
 
+  // Backs "return against a request number" (Return tab) — rather than
+  // staff free-typing an item + quantity from memory (the exact human-
+  // error source this was built to close off), this looks up exactly what
+  // was actually issued for that request from the transactions ledger
+  // (type='issue'), so the return screen can only ever offer quantities up
+  // to what genuinely went out the door. Two queries rather than one
+  // PostgREST embed-with-filter call — simpler and safer to get right than
+  // guessing at embedded-resource filter syntax for an occasional lookup,
+  // not a hot path. Returns { meta, items: [] } — meta is null and items
+  // empty if the code doesn't exist or nothing was ever issued against it
+  // (a request that's still pending, e.g.).
+  async listIssuedItemsForRequest(code) {
+    const { data: reqs, error: reqErr } = await supabaseClient
+      .from('requests')
+      .select('id, requester_name, department, work_area, building')
+      .eq('request_code', code);
+    if (reqErr) throw reqErr;
+    if (!reqs.length) return { meta: null, items: [] };
+    const ids = reqs.map((r) => r.id);
+    const { data: txns, error: txErr } = await supabaseClient
+      .from('transactions')
+      .select('id, sku_id, qty, uom, skus(sku_code, name, base_uom)')
+      .eq('type', 'issue')
+      .in('request_id', ids);
+    if (txErr) throw txErr;
+    return { meta: reqs[0], items: txns };
+  },
+
   async listRequests({ status = null } = {}) {
     // approver:user_profiles!approved_by(name) — explicit FK hint since
     // requests has two FKs into user_profiles (approved_by and

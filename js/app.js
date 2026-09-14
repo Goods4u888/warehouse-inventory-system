@@ -1052,6 +1052,154 @@ function renderReturnResult(sku, qty, uom) {
   document.getElementById('btn-print-return-sticker').addEventListener('click', () => printStickerSheet(sku, 'rt-sticker-qr-', readStickerCount('rt-print-qty')));
 }
 
+// ---- Return against a request number ---------------------------------------
+// Rather than staff free-typing an item + quantity from memory (the exact
+// human-error source this exists to close off), this looks up exactly what
+// was issued for a request (from the transactions ledger, via
+// DB.listIssuedItemsForRequest) and only ever lets a quantity be adjusted
+// downward from there — nothing can be "returned" that was never actually
+// taken out. One screen, not a two-step review like the fulfill-by-request
+// flow: there's no "why couldn't this happen" case here that needs a
+// mandatory remark the way a declined issue does, so the extra step would
+// just be friction. Saving loops DB.returnStock() once per item with a
+// qty > 0 — the same RPC the plain return form below already uses,
+// unchanged.
+let returnByRequestRows = [];
+let returnByRequestMeta = null;
+let returnByRequestCode = '';
+
+document.getElementById('btn-rt-lookup-request').addEventListener('click', async () => {
+  const code = document.getElementById('rt-request-code').value.trim();
+  const errEl = document.getElementById('rt-request-lookup-error');
+  errEl.textContent = '';
+  if (!code) return;
+  try {
+    const result = await DB.listIssuedItemsForRequest(code);
+    if (!result.items.length) {
+      errEl.textContent = t('emptyNoIssuedItemsForRequest', code);
+      return;
+    }
+    returnByRequestCode = code;
+    returnByRequestMeta = result.meta;
+    returnByRequestRows = result.items.map((tx) => ({
+      txnId: tx.id,
+      skuId: tx.sku_id,
+      name: tx.skus?.name || '',
+      skuCode: tx.skus?.sku_code || '',
+      baseUom: tx.skus?.base_uom || tx.uom,
+      issuedQty: tx.qty,
+      returnQty: tx.qty,
+    }));
+    openReturnByRequestSheet();
+  } catch (err) {
+    errEl.textContent = err.message || 'Could not look up request';
+  }
+});
+document.getElementById('rt-request-code').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); document.getElementById('btn-rt-lookup-request').click(); }
+});
+
+function returnByRequestRowHtml(row) {
+  return `
+    <div class="card" style="margin-bottom:var(--s3)">
+      <div class="card-title">${escapeHtml(row.name)}</div>
+      <div class="card-meta mono">${escapeHtml(row.skuCode)}</div>
+      <div class="field" style="margin-top:var(--s2)">
+        <label for="rtreq-qty-${row.txnId}">${t('fieldQtyReturned')}</label>
+        <input type="number" class="rtreq-qty-input" id="rtreq-qty-${row.txnId}" data-id="${row.txnId}" min="0" step="any" max="${row.issuedQty}" value="${row.returnQty}">
+        <p class="field-hint">${t('hintIssuedQty', fmtQty(row.issuedQty), escapeHtml(row.baseUom))}</p>
+      </div>
+    </div>
+  `;
+}
+
+function openReturnByRequestSheet() {
+  const meta = returnByRequestMeta;
+  Sheet.open(t('returnByRequestTitle', returnByRequestCode), `
+    <div id="rtreq-error"></div>
+    <div class="confirm-rows" style="margin-bottom:var(--s4)">
+      <div class="confirm-row"><span>${t('fieldRequesterName2')}</span><strong>${escapeHtml(meta.requester_name || '—')}</strong></div>
+      <div class="confirm-row"><span>${t('fieldDepartment')}</span><strong>${escapeHtml(meta.department || t('noDepartment'))}</strong></div>
+      <div class="confirm-row"><span>${t('fieldWorkArea')}</span><strong>${escapeHtml(meta.work_area || t('noWorkArea'))}</strong></div>
+      <div class="confirm-row"><span>${t('fieldBuilding')}</span><strong>${escapeHtml(meta.building || t('noBuilding'))}</strong></div>
+    </div>
+    <div id="rtreq-item-rows">${returnByRequestRows.map(returnByRequestRowHtml).join('')}</div>
+    <div class="field">
+      <label for="rtreq-by">${t('fieldReturnedBy')}</label>
+      <input type="text" id="rtreq-by" placeholder="${escapeHtml(t('fieldReturnedByPh'))}" required>
+    </div>
+    <div class="field">
+      <label for="rtreq-note">${t('fieldReturnNote')}</label>
+      <input type="text" id="rtreq-note" placeholder="${escapeHtml(t('fieldReturnNotePh'))}">
+    </div>
+    <div class="field">
+      <label for="rtreq-photos">${t('fieldEvidencePhotos')}</label>
+      <input type="file" id="rtreq-photos" accept="image/*" multiple>
+      <div class="evidence-thumbs" id="rtreq-photos-preview"></div>
+    </div>
+    <button type="button" class="btn btn-primary btn-block" id="btn-rtreq-save" style="margin-top:var(--s4)">${icon('check', 16)}<span id="rtreq-save-label">${t('btnSave')}</span></button>
+  `);
+  applyStaticIcons();
+  wireEvidencePicker('rtreq');
+  document.querySelectorAll('.rtreq-qty-input').forEach((input) => {
+    input.addEventListener('input', () => {
+      const row = returnByRequestRows.find((r) => r.txnId === input.dataset.id);
+      row.returnQty = input.value === '' ? '' : Number(input.value);
+    });
+  });
+  document.getElementById('btn-rtreq-save').addEventListener('click', onReturnByRequestSave);
+}
+
+async function onReturnByRequestSave() {
+  const errEl = document.getElementById('rtreq-error');
+  errEl.innerHTML = '';
+
+  // Defensive re-sync, same reasoning as the fulfill flow above.
+  document.querySelectorAll('.rtreq-qty-input').forEach((input) => {
+    const row = returnByRequestRows.find((r) => r.txnId === input.dataset.id);
+    if (row) row.returnQty = input.value === '' ? '' : Number(input.value);
+  });
+
+  const returnedBy = document.getElementById('rtreq-by').value.trim();
+  const note = document.getElementById('rtreq-note').value.trim();
+
+  const invalid = returnByRequestRows.find((r) => r.returnQty !== 0 && !(r.returnQty > 0));
+  if (invalid) {
+    errEl.innerHTML = `<div class="form-error">${escapeHtml(t('errorQtyRequired'))}</div>`;
+    document.getElementById(`rtreq-qty-${invalid.txnId}`)?.focus();
+    return;
+  }
+  const overIssued = returnByRequestRows.find((r) => Number(r.returnQty) > Number(r.issuedQty));
+  if (overIssued) {
+    errEl.innerHTML = `<div class="form-error">${escapeHtml(t('errorReturnExceedsIssued', overIssued.name, fmtQty(overIssued.issuedQty), overIssued.baseUom))}</div>`;
+    document.getElementById(`rtreq-qty-${overIssued.txnId}`)?.focus();
+    return;
+  }
+  const returningRows = returnByRequestRows.filter((r) => r.returnQty > 0);
+  if (!returningRows.length || !returnedBy) {
+    errEl.innerHTML = `<div class="form-error">${escapeHtml(t('fieldRequiredGeneric'))}</div>`;
+    return;
+  }
+
+  const btn = document.getElementById('btn-rtreq-save');
+  const label = document.getElementById('rtreq-save-label');
+  btn.disabled = true; label.textContent = t('btnGenerating');
+  try {
+    const imagePaths = await uploadEvidenceFor('rtreq', 'return');
+    for (const row of returningRows) {
+      await DB.returnStock({ skuId: row.skuId, qty: Number(row.returnQty), uom: row.baseUom, returnedBy, note: note || null, imagePaths });
+    }
+    toast(t('toastReturnByRequestDone', returningRows.length), 'success');
+    resetEvidence('rtreq');
+    Sheet.close();
+    document.getElementById('rt-request-code').value = '';
+    refreshReturnSkuOptions();
+  } catch (err) {
+    errEl.innerHTML = `<div class="form-error">${escapeHtml(err.message || 'Could not record return')}</div>`;
+    btn.disabled = false; label.textContent = t('btnSave');
+  }
+}
+
 // ============================================================================
 // ISSUE / SCAN
 // ============================================================================
