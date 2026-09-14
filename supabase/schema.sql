@@ -318,6 +318,14 @@ create index if not exists requests_sku_id_idx on requests(sku_id);
 -- issue screen. Nullable: only fulfilled requests will have one.
 alter table requests add column if not exists picked_up_by text;
 
+-- A staff remark explaining why a line couldn't be delivered — set by
+-- decline_request_item() below, distinct from `notes` (the requester's own
+-- comment, set at creation and never touched after). Only ever populated
+-- when a line is closed out at 0 qty instead of actually issued — see the
+-- "fulfill by request code" scan flow (js/app.js) for where this is
+-- collected.
+alter table requests add column if not exists staff_note text;
+
 -- The public requester form (no login, no item picker — see
 -- create_public_request() below) collects who's asking and which
 -- department to charge back to, then a free-text description in `notes`.
@@ -767,6 +775,17 @@ begin
   if p_actual_qty <= 0 then
     raise exception 'Quantity must be greater than zero';
   end if;
+  -- Client-side already requires this (see the issue-picked-up-by check in
+  -- renderScannedItem()'s btn-confirm-issue handler in app.js), but that's
+  -- only a UI convenience — anyone with a staff/admin JWT could call this RPC
+  -- directly and skip it. Enforcing it here closes the actual gap: without
+  -- it, a fulfilled request could carry a null picked_up_by, leaving no way
+  -- to tell who physically walked away with the materials, unlike
+  -- requester_name on the request side which is already always populated
+  -- (see create_public_request()/create_authenticated_request() above).
+  if nullif(trim(p_performed_by), '') is null then
+    raise exception 'Please enter who picked up the items';
+  end if;
 
   select * into v_sku from skus where id = p_sku_id for update;
   if not found then
@@ -1174,6 +1193,42 @@ begin
 end;
 $$;
 
+-- Closing out a request line without delivering it — the "cannot deliver"
+-- path in the fulfill-by-request-code scan flow (js/app.js), for an item
+-- that's out of stock or otherwise can't be handed over right now. Unlike
+-- issue_stock() this never touches skus.qty_on_hand and never writes a
+-- transactions row — nothing physically moved, so there's nothing to log
+-- as a stock movement. It still closes the line out as 'fulfilled' rather
+-- than leaving it open indefinitely (see the conversation this came out
+-- of: a real "not delivered" outcome shouldn't stay stuck in the open
+-- queue forever, and 'cancelled' would misleadingly read as "never
+-- processed" when staff actually looked at it and couldn't fulfill it).
+-- p_note is mandatory — this function exists specifically to make sure a
+-- reason is always on record, not optional the way requester-side notes
+-- are. Same non-security-definer reasoning as set_request_status above:
+-- runs as the caller, so RLS alone restricts this to staff/admin.
+create or replace function decline_request_item(p_request_id uuid, p_note text) returns requests
+language plpgsql
+as $$
+declare
+  v_row requests;
+begin
+  if nullif(trim(p_note), '') is null then
+    raise exception 'Please enter a reason';
+  end if;
+
+  update requests set status = 'fulfilled', staff_note = trim(p_note)
+  where id = p_request_id
+  returning * into v_row;
+
+  if not found then
+    raise exception 'Request not found, or you do not have permission to update it';
+  end if;
+
+  return v_row;
+end;
+$$;
+
 -- find_auth_user_id() used to be Manage Staff's way of turning "an email an
 -- admin already created by hand in the Supabase dashboard" into a uuid to
 -- attach a profile to. It's gone: Manage Staff now creates the login
@@ -1240,6 +1295,7 @@ revoke execute on function create_public_request(text, text, text, text, jsonb, 
 revoke execute on function next_request_code() from public;
 revoke execute on function create_authenticated_request(jsonb, text, date, text, text, text, text) from public;
 revoke execute on function set_request_status(uuid, text) from public;
+revoke execute on function decline_request_item(uuid, text) from public;
 revoke execute on function is_staff_or_admin() from public;
 revoke execute on function is_admin() from public;
 
@@ -1253,6 +1309,7 @@ grant execute on function create_public_request(text, text, text, text, jsonb, t
 grant execute on function next_request_code() to authenticated;
 grant execute on function create_authenticated_request(jsonb, text, date, text, text, text, text) to authenticated;
 grant execute on function set_request_status(uuid, text) to authenticated;
+grant execute on function decline_request_item(uuid, text) to authenticated;
 -- Called from inside policy expressions (section 8), evaluated as the
 -- querying role — authenticated needs EXECUTE for those policies to work.
 grant execute on function is_staff_or_admin() to authenticated;

@@ -80,6 +80,10 @@ function showConfirmView({ requestCode, createdAt, requesterName, department, wo
 // interactive, it only ever needs to exist for window.print().
 function renderPrintSheet({ requestCode, createdAt, requesterName, department, workArea, building, items: submittedItems, comment }) {
   document.getElementById('print-code').textContent = requestCode;
+  // Staff scan this at the counter to jump straight to the "fulfill this
+  // request" screen — encodes request_code exactly like an item sticker
+  // encodes a sku_code, so it goes through the same scan/decode path.
+  QR.renderInto(document.getElementById('print-qr'), requestCode, 72);
   document.getElementById('print-date').textContent = fmtDateTime(createdAt);
   document.getElementById('print-department').textContent = department || t('noDepartment');
   document.getElementById('print-name').textContent = requesterName;

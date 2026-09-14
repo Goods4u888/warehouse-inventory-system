@@ -1079,6 +1079,16 @@ document.getElementById('btn-lookup-lot').addEventListener('click', () => {
 
 async function onItemScanned(code, preferredAction = null) {
   QR.stopScanner(document.getElementById('scan-video'));
+  // A request-code QR (printed on the slip via printRequestSlip()/
+  // js/request.js renderPrintSheet()) looks like REQ-260914-005 — visually
+  // distinct from a sku_code (e.g. CEM-014), so this branches on the
+  // prefix alone rather than trying a sku lookup first and falling back;
+  // that would waste a round-trip on every request-code scan, which is
+  // meant to be the common case at the counter, not the exception.
+  if (code.startsWith('REQ-')) {
+    openFulfillRequestSheet(code);
+    return;
+  }
   document.getElementById('scan-status').textContent = t('scanLookingUp', code);
   try {
     const sku = await DB.findSkuByCode(code);
@@ -1261,6 +1271,260 @@ function renderScannedItem(sku, openRequests, preferredAction = null) {
 }
 
 // ============================================================================
+// FULFILL BY REQUEST CODE — scan the QR on a printed/PDF request slip
+// (printRequestSlip() in app.js, renderPrintSheet() in js/request.js) to
+// process every still-open item on that request in one pass, instead of
+// scanning each item separately and re-typing "picked up by" every time.
+// Two-step (adjust -> review -> back to adjust if needed -> confirm) so a
+// mistyped quantity is caught before it's committed, not just flagged
+// after the fact via a toast like the single-item scan flow does. An item
+// that can't be delivered is "declined" here rather than issued: it never
+// touches stock or writes a transaction, but still closes the line out as
+// fulfilled with a mandatory staff remark (decline_request_item() in
+// schema.sql) — see the design conversation this came out of for why that
+// beats leaving it open indefinitely or marking it cancelled.
+// ============================================================================
+let fulfillRows = [];
+let fulfillRequestMeta = null;
+let fulfillPickedUpBy = '';
+
+async function openFulfillRequestSheet(requestCode) {
+  let rows;
+  try {
+    rows = await DB.getRequestByCode(requestCode);
+  } catch (err) {
+    toast(err.message || 'Could not load request', 'error');
+    resetScanView();
+    return;
+  }
+  // Comment-only rows (no sku_id) have nothing to issue or decline against
+  // — they stay managed the ordinary way, via the ordinary status
+  // dropdown on the Requests list.
+  const openRows = rows.filter((r) => r.sku_id && r.status !== 'fulfilled' && r.status !== 'cancelled');
+  if (!openRows.length) {
+    toast(t('emptyNoOpenItemsForRequest', requestCode), 'error');
+    resetScanView();
+    return;
+  }
+  fulfillRequestMeta = rows[0];
+  fulfillPickedUpBy = '';
+  fulfillRows = openRows.map((r) => ({
+    id: r.id,
+    skuId: r.sku_id,
+    name: r.skus?.name || '',
+    skuCode: r.skus?.sku_code || '',
+    baseUom: r.skus?.base_uom || '',
+    onHand: r.skus?.qty_on_hand ?? 0,
+    requestedQty: r.qty_requested,
+    actualQty: r.qty_requested,
+    declined: false,
+    declineNote: '',
+  }));
+  renderFulfillAdjustStep();
+}
+
+function fulfillRowHtml(row) {
+  return `
+    <div class="card" data-row-id="${row.id}" style="margin-bottom:var(--s3)">
+      <div class="card-row">
+        <div>
+          <div class="card-title">${escapeHtml(row.name)}</div>
+          <div class="card-meta mono">${escapeHtml(row.skuCode)}</div>
+        </div>
+        <button type="button" class="btn btn-ghost btn-sm fulfill-decline-toggle" data-id="${row.id}">${icon(row.declined ? 'plusCircle' : 'xCircle', 14)}<span>${row.declined ? t('btnUndoDecline') : t('btnCannotDeliver')}</span></button>
+      </div>
+      <div class="field" style="margin-top:var(--s2)">
+        <label for="fulfill-qty-${row.id}">${t('fieldActualQty')}</label>
+        <input type="number" class="fulfill-qty-input" id="fulfill-qty-${row.id}" data-id="${row.id}" min="0.0001" step="any" max="${row.onHand}" value="${row.actualQty}" ${row.declined ? 'disabled' : ''}>
+        <p class="field-hint">${t('hintRequested', fmtQty(row.requestedQty), escapeHtml(row.baseUom))}</p>
+      </div>
+      ${row.declined ? `
+        <div class="field">
+          <label for="fulfill-note-${row.id}">${t('fieldDeclineReason')}</label>
+          <textarea id="fulfill-note-${row.id}" class="fulfill-decline-note" data-id="${row.id}" placeholder="${escapeHtml(t('declineReasonPlaceholder'))}">${escapeHtml(row.declineNote)}</textarea>
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
+function wireFulfillRowEvents() {
+  document.querySelectorAll('.fulfill-decline-toggle').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      // Capture whatever's currently typed before re-rendering the whole
+      // step wipes the DOM out from under it.
+      fulfillPickedUpBy = document.getElementById('fulfill-picked-up-by').value;
+      const row = fulfillRows.find((r) => r.id === btn.dataset.id);
+      row.declined = !row.declined;
+      row.actualQty = row.declined ? 0 : row.requestedQty;
+      if (!row.declined) row.declineNote = '';
+      renderFulfillAdjustStep();
+    });
+  });
+  document.querySelectorAll('.fulfill-qty-input').forEach((input) => {
+    input.addEventListener('input', () => {
+      const row = fulfillRows.find((r) => r.id === input.dataset.id);
+      row.actualQty = input.value === '' ? '' : Number(input.value);
+    });
+  });
+  document.querySelectorAll('.fulfill-decline-note').forEach((ta) => {
+    ta.addEventListener('input', () => {
+      const row = fulfillRows.find((r) => r.id === ta.dataset.id);
+      row.declineNote = ta.value;
+    });
+  });
+}
+
+// Re-attaches the photo picker without resetting evidenceState.fulfill —
+// wireEvidencePicker() (shared with Receive/Return/single-item Issue)
+// always resets its state on call, which would silently drop already-
+// selected photos every time "cannot deliver" toggles a row and re-
+// renders this whole step.
+function wireFulfillPhotoPicker() {
+  if (!evidenceState.fulfill) evidenceState.fulfill = [];
+  const input = document.getElementById('fulfill-photos');
+  input.addEventListener('change', (e) => {
+    evidenceState.fulfill = [...evidenceState.fulfill, ...Array.from(e.target.files)];
+    e.target.value = '';
+    renderEvidenceThumbs('fulfill');
+  });
+  renderEvidenceThumbs('fulfill');
+}
+
+function renderFulfillAdjustStep() {
+  const meta = fulfillRequestMeta;
+  Sheet.open(t('fulfillRequestTitle', meta.request_code), `
+    <div id="fulfill-error"></div>
+    <div class="confirm-rows" style="margin-bottom:var(--s4)">
+      <div class="confirm-row"><span>${t('fieldRequesterName2')}</span><strong>${escapeHtml(meta.requester_name)}</strong></div>
+      <div class="confirm-row"><span>${t('fieldDepartment')}</span><strong>${escapeHtml(meta.department || t('noDepartment'))}</strong></div>
+      <div class="confirm-row"><span>${t('fieldWorkArea')}</span><strong>${escapeHtml(meta.work_area || t('noWorkArea'))}</strong></div>
+      <div class="confirm-row"><span>${t('fieldBuilding')}</span><strong>${escapeHtml(meta.building || t('noBuilding'))}</strong></div>
+    </div>
+    <div id="fulfill-item-rows">${fulfillRows.map(fulfillRowHtml).join('')}</div>
+    <div class="field">
+      <label for="fulfill-picked-up-by">${t('fieldPickedUpBy')}</label>
+      <input type="text" id="fulfill-picked-up-by" placeholder="${escapeHtml(t('fieldReceivedByPh'))}" value="${escapeHtml(fulfillPickedUpBy)}">
+    </div>
+    <div class="field">
+      <label for="fulfill-photos">${t('fieldEvidencePhotos')}</label>
+      <input type="file" id="fulfill-photos" accept="image/*" multiple>
+      <div class="evidence-thumbs" id="fulfill-photos-preview"></div>
+    </div>
+    <button type="button" class="btn btn-primary btn-block" id="btn-fulfill-review" style="margin-top:var(--s4)">${icon('arrowRight', 16)}<span>${t('btnReviewFulfill')}</span></button>
+  `);
+  applyStaticIcons();
+  wireFulfillRowEvents();
+  wireFulfillPhotoPicker();
+  document.getElementById('btn-fulfill-review').addEventListener('click', onFulfillReviewClick);
+}
+
+function onFulfillReviewClick() {
+  const errEl = document.getElementById('fulfill-error');
+  errEl.innerHTML = '';
+  fulfillPickedUpBy = document.getElementById('fulfill-picked-up-by').value.trim();
+
+  // Defensive re-sync in case a browser fires 'input' inconsistently —
+  // cheap, and guarantees fulfillRows reflects exactly what's on screen
+  // right before validating it.
+  document.querySelectorAll('.fulfill-qty-input').forEach((input) => {
+    const row = fulfillRows.find((r) => r.id === input.dataset.id);
+    if (row && !row.declined) row.actualQty = input.value === '' ? '' : Number(input.value);
+  });
+  document.querySelectorAll('.fulfill-decline-note').forEach((ta) => {
+    const row = fulfillRows.find((r) => r.id === ta.dataset.id);
+    if (row) row.declineNote = ta.value;
+  });
+
+  const deliveringRows = fulfillRows.filter((r) => !r.declined);
+  const decliningRows = fulfillRows.filter((r) => r.declined);
+
+  const badQty = deliveringRows.find((r) => !(r.actualQty > 0) || r.actualQty > r.onHand);
+  if (badQty) {
+    errEl.innerHTML = `<div class="form-error">${escapeHtml(t('errorQtyRequired'))}</div>`;
+    document.getElementById(`fulfill-qty-${badQty.id}`)?.focus();
+    return;
+  }
+  const missingNote = decliningRows.find((r) => !r.declineNote.trim());
+  if (missingNote) {
+    errEl.innerHTML = `<div class="form-error">${escapeHtml(t('errorDeclineReasonRequired'))}</div>`;
+    document.getElementById(`fulfill-note-${missingNote.id}`)?.focus();
+    return;
+  }
+  if (deliveringRows.length && !fulfillPickedUpBy) {
+    errEl.innerHTML = `<div class="form-error">${escapeHtml(t('fieldPickedUpByRequired'))}</div>`;
+    return;
+  }
+
+  renderFulfillReviewStep();
+}
+
+function renderFulfillReviewStep() {
+  const meta = fulfillRequestMeta;
+  Sheet.open(t('fulfillRequestTitle', meta.request_code), `
+    <div id="fulfill-error"></div>
+    <p class="field-hint" style="margin-bottom:var(--s4)">${t('fulfillReviewHeading')}</p>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>${t('colItem')}</th><th>${t('colRequested')}</th><th>${t('colActual')}</th></tr></thead>
+        <tbody>
+          ${fulfillRows.map((r) => `
+            <tr${!r.declined && Number(r.actualQty) !== Number(r.requestedQty) ? ' style="background:var(--discrepancy-wash)"' : ''}>
+              <td>${escapeHtml(r.name)} <span class="mono">(${escapeHtml(r.skuCode)})</span></td>
+              <td class="num">${fmtQty(r.requestedQty)} ${escapeHtml(r.baseUom)}</td>
+              <td class="num">${r.declined ? `<span class="chip chip-low">${t('chipNotDelivered')}</span>` : `${fmtQty(r.actualQty)} ${escapeHtml(r.baseUom)}`}</td>
+            </tr>
+            ${r.declined ? `<tr><td colspan="3" class="card-meta">${escapeHtml(r.declineNote)}</td></tr>` : ''}
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div class="confirm-row" style="margin-top:var(--s4)"><span>${t('fieldPickedUpBy')}</span><strong>${escapeHtml(fulfillPickedUpBy || '—')}</strong></div>
+    <button type="button" class="btn btn-outline btn-block" id="btn-fulfill-back" style="margin-top:var(--s4)">${icon('arrowRight', 16)}<span>${t('btnBackToAdjust')}</span></button>
+    <button type="button" class="btn btn-primary btn-block" id="btn-fulfill-confirm" style="margin-top:var(--s3)">${icon('check', 16)}<span id="fulfill-confirm-label">${t('btnConfirmFulfill')}</span></button>
+  `);
+  applyStaticIcons();
+  document.getElementById('btn-fulfill-back').addEventListener('click', renderFulfillAdjustStep);
+  document.getElementById('btn-fulfill-confirm').addEventListener('click', onFulfillConfirmClick);
+}
+
+async function onFulfillConfirmClick() {
+  const errEl = document.getElementById('fulfill-error');
+  errEl.innerHTML = '';
+  const btn = document.getElementById('btn-fulfill-confirm');
+  const label = document.getElementById('fulfill-confirm-label');
+  btn.disabled = true; label.textContent = t('btnConfirming');
+
+  try {
+    const imagePaths = await uploadEvidenceFor('fulfill', 'issue');
+    let delivered = 0;
+    let declined = 0;
+    let failed = 0;
+    for (const row of fulfillRows) {
+      try {
+        if (row.declined) {
+          await DB.declineRequestItem(row.id, row.declineNote.trim());
+          declined++;
+        } else {
+          await DB.issueStock({ skuId: row.skuId, requestId: row.id, actualQty: Number(row.actualQty), performedBy: fulfillPickedUpBy, imagePaths });
+          delivered++;
+        }
+      } catch (err) {
+        failed++;
+      }
+    }
+    toast(t('toastFulfillDone', delivered, declined), failed ? 'error' : 'success');
+    resetEvidence('fulfill');
+    Sheet.close();
+    resetScanView();
+    loadRequests();
+  } catch (err) {
+    errEl.innerHTML = `<div class="form-error">${escapeHtml(err.message || 'Could not complete fulfillment')}</div>`;
+    btn.disabled = false; label.textContent = t('btnConfirmFulfill');
+  }
+}
+
+// ============================================================================
 // REQUESTS
 // ============================================================================
 const REQUEST_STATUSES = ['all', 'pending', 'preparing', 'ready', 'fulfilled'];
@@ -1336,7 +1600,9 @@ function renderRequestsList() {
           <div class="card-title">${title}</div>
           <div class="card-meta">${meta}</div>
         </div>
-        <span class="chip ${statusChipClass(r.status)}">${statusLabel(r.status)}</span>
+        ${r.status === 'fulfilled' && r.staff_note
+          ? `<span class="chip chip-low">${t('chipNotDelivered')}</span>`
+          : `<span class="chip ${statusChipClass(r.status)}">${statusLabel(r.status)}</span>`}
       </div>
       ${r.work_area ? `<div class="card-meta" style="margin-top:var(--s2)">${icon('mapPin', 12)} ${escapeHtml(r.work_area)}</div>` : ''}
       ${r.notes ? `<div class="card-meta" style="margin-top:var(--s2)">${escapeHtml(r.notes)}</div>` : ''}
@@ -1344,6 +1610,7 @@ function renderRequestsList() {
         <span class="card-meta mono">${escapeHtml(r.request_code)} · ${whenLine}</span>
         ${nextStatusButton(r)}
       </div>
+      ${r.status === 'fulfilled' && r.staff_note ? `<div class="card-meta" style="margin-top:var(--s2)">${escapeHtml(r.staff_note)}</div>` : ''}
       ${r.status === 'fulfilled' && r.picked_up_by ? `<div class="card-meta" style="margin-top:var(--s2)">${escapeHtml(t('pickedUpBy', r.picked_up_by))}</div>` : ''}
       ${r.approver?.name ? `<div class="card-meta" style="margin-top:var(--s1)">${escapeHtml(t('approvedBy', r.approver.name))}</div>` : ''}
       <div class="card-row" style="margin-top:var(--s2)">
@@ -1419,7 +1686,10 @@ function printRequestSlip(requestCode, rowsOverride) {
     </div>
     <div class="print-sheet-head">
       <div class="print-sheet-title">${escapeHtml(t('printFormTitle'))}</div>
-      <div class="print-sheet-code">${escapeHtml(first.request_code)}</div>
+      <div class="print-sheet-code-group">
+        <div class="print-sheet-code">${escapeHtml(first.request_code)}</div>
+        <div class="print-sheet-qr" id="request-print-qr"></div>
+      </div>
     </div>
     <table class="print-sheet-meta">
       <tr>
@@ -1459,6 +1729,12 @@ function printRequestSlip(requestCode, rowsOverride) {
     </div>
     <div class="print-sheet-footer">${escapeHtml(t('printFooterNote', first.request_code))}</div>
   `;
+  // Scanning this at the counter is what drives openFulfillRequestSheet()
+  // below — encodes the request_code exactly like an item sticker encodes
+  // a sku_code, so the same scanner/decode path (js/qr.js) hands it to
+  // onItemScanned() unchanged; the REQ- prefix is what tells that function
+  // which kind of code it just read.
+  QR.renderInto(document.getElementById('request-print-qr'), first.request_code, 72);
   window.print();
 }
 

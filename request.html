@@ -8,8 +8,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 
-<link rel="stylesheet" href="css/tokens.css?v=20260911t">
-<link rel="stylesheet" href="css/app.css?v=20260911t">
+<link rel="stylesheet" href="css/tokens.css?v=20260911u">
+<link rel="stylesheet" href="css/app.css?v=20260911u">
 </head>
 <body>
 
@@ -125,7 +125,10 @@
         </div>
         <div class="print-sheet-head">
           <div class="print-sheet-title" data-i18n="printFormTitle">Materials / Equipment Requisition</div>
-          <div class="print-sheet-code" id="print-code"></div>
+          <div class="print-sheet-code-group">
+            <div class="print-sheet-code" id="print-code"></div>
+            <div class="print-sheet-qr" id="print-qr"></div>
+          </div>
         </div>
         <table class="print-sheet-meta">
           <tr>
@@ -175,15 +178,20 @@
 
 </div>
 
-<div class="app-version no-print">v20260911t</div>
+<div class="app-version no-print">v20260911u</div>
 
-<!-- Third-party: Supabase client (create_public_request RPC only) -->
+<!-- Third-party: Supabase client (create_public_request RPC only), plus the
+     QR generator so the confirmation/print slip can carry a scannable
+     request-code badge (js/qr.js QR.renderInto — generation only, no
+     camera/jsQR needed on this page since nothing here scans). -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
-<script src="js/config.js?v=20260911t"></script>
-<script src="js/db.js?v=20260911t"></script>
-<script src="js/i18n.js?v=20260911t"></script>
-<script src="js/icons.js?v=20260911t"></script>
-<script src="js/request.js?v=20260911t"></script>
+<script src="js/config.js?v=20260911u"></script>
+<script src="js/db.js?v=20260911u"></script>
+<script src="js/i18n.js?v=20260911u"></script>
+<script src="js/icons.js?v=20260911u"></script>
+<script src="js/qr.js?v=20260911u"></script>
+<script src="js/request.js?v=20260911u"></script>
 </body>
 </html>

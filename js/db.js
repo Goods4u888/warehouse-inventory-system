@@ -329,16 +329,19 @@ const DB = {
   },
 
   // ---- Requests ---------------------------------------------------------------
-  // Same select shape as listRequests() below (skus/approver embed included)
-  // but targeted at one request_code regardless of status — used right
-  // after a successful submit to fetch the properly-joined rows for the
-  // post-submit "Export PDF" confirmation, independent of whatever status
-  // filter the Requests list currently has selected (see
-  // openNewRequestSheet() in app.js).
+  // Same select shape as listRequests() below (skus/approver embed
+  // included, plus qty_on_hand — needed to cap the adjustable qty inputs
+  // in openFulfillRequestSheet()'s per-item rows) but targeted at one
+  // request_code regardless of status — used right after a successful
+  // submit to fetch the properly-joined rows for the post-submit
+  // "Export PDF" confirmation, and by the fulfill-by-request-code scan
+  // flow, both independent of whatever status filter the Requests list
+  // currently has selected (see openNewRequestSheet()/
+  // openFulfillRequestSheet() in app.js).
   async getRequestByCode(code) {
     const { data, error } = await supabaseClient
       .from('requests')
-      .select('*, skus(sku_code, name, base_uom), approver:user_profiles!approved_by(name)')
+      .select('*, skus(sku_code, name, base_uom, qty_on_hand), approver:user_profiles!approved_by(name)')
       .eq('request_code', code);
     if (error) throw error;
     return data;
@@ -390,6 +393,21 @@ const DB = {
     const { data, error } = await supabaseClient.rpc('set_request_status', {
       p_request_id: id,
       p_status: status,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  // Closes out one request line at 0 qty instead of issuing it — the
+  // "cannot deliver" path in the fulfill-by-request-code scan flow
+  // (js/app.js). No stock movement, no transactions row — see
+  // decline_request_item() in schema.sql. note is mandatory; the RPC
+  // itself also enforces this, so a caller bypassing this wrapper can't
+  // skip it either.
+  async declineRequestItem(id, note) {
+    const { data, error } = await supabaseClient.rpc('decline_request_item', {
+      p_request_id: id,
+      p_note: note,
     });
     if (error) throw error;
     return data;
