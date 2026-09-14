@@ -257,6 +257,9 @@ const I18N = {
     colItem: 'Item',
     reportRequests: 'Requests',
     noDepartment: '—',
+    addDepartmentTitle: 'Add a new department',
+    newDepartmentPlaceholder: 'New department name',
+    errorDepartmentExists: 'That department already exists',
 
     langToggle: 'ไทย',
   },
@@ -508,6 +511,9 @@ const I18N = {
     colItem: 'รายการ',
     reportRequests: 'คำขอ',
     noDepartment: '—',
+    addDepartmentTitle: 'เพิ่มแผนกใหม่',
+    newDepartmentPlaceholder: 'ชื่อแผนกใหม่',
+    errorDepartmentExists: 'มีแผนกนี้อยู่แล้ว',
 
     langToggle: 'EN',
   },

@@ -216,6 +216,64 @@ function updateCommentRequirement() {
   hint.hidden = items.length > 0;
 }
 
+// ---- Department dropdown --------------------------------------------------
+// Same "reference table + inline add" pattern as Manage Staff's department
+// dropdown (js/app.js). Department is required here (unlike Building below),
+// so the placeholder option is disabled — a real choice must be made before
+// the form's native validation lets the request submit.
+let departments = [];
+
+async function loadDepartments() {
+  try {
+    departments = await DB.listDepartments();
+    renderDepartmentOptions();
+  } catch (_) {
+    // Dropdown just comes up empty (only the placeholder option) — same
+    // silent fallback as loadItems()/loadBuildings() above.
+  }
+}
+function renderDepartmentOptions(selected = '') {
+  const sel = document.getElementById('req-department');
+  const current = selected || sel.value;
+  sel.innerHTML = `
+    <option value="" disabled ${current ? '' : 'selected'}>${t('noDepartment')}</option>
+    ${departments.map((d) => `<option value="${escapeHtml(d.name)}" ${d.name === current ? 'selected' : ''}>${escapeHtml(d.name)}</option>`).join('')}
+  `;
+}
+async function onAddDepartment(newInput, newRow) {
+  const name = newInput.value.trim();
+  const errEl = document.getElementById('request-error');
+  errEl.innerHTML = '';
+  if (!name) return;
+  try {
+    await DB.createDepartment(name);
+    departments = await DB.listDepartments();
+    renderDepartmentOptions(name);
+    newInput.value = '';
+    newRow.hidden = true;
+  } catch (err) {
+    const msg = /duplicate|unique/i.test(err.message || '') ? t('errorDepartmentExists') : (err.message || 'Could not add department');
+    errEl.innerHTML = `<div class="form-error">${escapeHtml(msg)}</div>`;
+  }
+}
+(() => {
+  const addBtn = document.getElementById('req-department-add-btn');
+  const newRow = document.getElementById('req-department-new-row');
+  const newInput = document.getElementById('req-department-new-input');
+  addBtn.addEventListener('click', () => {
+    newRow.hidden = !newRow.hidden;
+    if (!newRow.hidden) newInput.focus();
+  });
+  document.getElementById('req-department-new-cancel').addEventListener('click', () => {
+    newInput.value = '';
+    newRow.hidden = true;
+  });
+  document.getElementById('req-department-new-confirm').addEventListener('click', () => onAddDepartment(newInput, newRow));
+  newInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); onAddDepartment(newInput, newRow); }
+  });
+})();
+
 // ---- Building dropdown ---------------------------------------------------
 // Same "reference table + inline add" pattern as Manage Staff's department
 // dropdown (js/app.js), but open to anon here (see "buildings" RLS in
@@ -344,4 +402,5 @@ I18n.applyStatic();
 applyStaticIcons();
 updateCommentRequirement();
 loadItems();
+loadDepartments();
 loadBuildings();

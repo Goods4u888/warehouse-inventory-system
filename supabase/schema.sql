@@ -1337,13 +1337,19 @@ drop policy if exists "staff and admin full access - categories" on categories;
 create policy "staff and admin full access - categories" on categories for all to authenticated
   using (is_staff_or_admin()) with check (is_staff_or_admin());
 
--- departments: staff/admin only (Manage Staff's department dropdown), same
--- reasoning as categories above — Manage Staff itself is admin-only in the
--- UI, but that split stays UI-only rather than RLS, consistent with every
--- other staff/admin table here.
+-- departments: staff/admin get full access (Manage Staff's department
+-- dropdown — including update/delete, which the public form never needs).
+-- anon/authenticated also get view+add below: the public request form's
+-- own department field used to be free-text, so anon could already submit
+-- any department name unmoderated — a shared dropdown is a data-quality
+-- upgrade, not a new exposure, same reasoning as buildings just below.
 drop policy if exists "staff and admin full access - departments" on departments;
 create policy "staff and admin full access - departments" on departments for all to authenticated
   using (is_staff_or_admin()) with check (is_staff_or_admin());
+drop policy if exists "anyone can view departments" on departments;
+drop policy if exists "anyone can add departments" on departments;
+create policy "anyone can view departments" on departments for select to anon, authenticated using (true);
+create policy "anyone can add departments" on departments for insert to anon, authenticated with check (true);
 
 -- buildings: deliberately open, unlike departments above — a building name
 -- is no more sensitive than the free-text work_area anyone can already

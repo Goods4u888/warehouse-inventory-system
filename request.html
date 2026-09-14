@@ -8,8 +8,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 
-<link rel="stylesheet" href="css/tokens.css?v=20260911m">
-<link rel="stylesheet" href="css/app.css?v=20260911m">
+<link rel="stylesheet" href="css/tokens.css?v=20260911n">
+<link rel="stylesheet" href="css/app.css?v=20260911n">
 </head>
 <body>
 
@@ -43,7 +43,15 @@
         </div>
         <div class="field">
           <label for="req-department" data-i18n="fieldDepartment">Department</label>
-          <input type="text" id="req-department" required>
+          <div class="field-with-btn">
+            <select id="req-department" required></select>
+            <button type="button" class="btn-icon-add" id="req-department-add-btn" data-icon="plusCircle" data-icon-size="18" title="Add a new department" aria-label="Add a new department"></button>
+          </div>
+          <div class="new-category-row" id="req-department-new-row" hidden>
+            <input type="text" id="req-department-new-input" data-i18n-placeholder="newDepartmentPlaceholder" placeholder="New department name">
+            <button type="button" class="btn btn-outline btn-sm" id="req-department-new-confirm" data-icon="check" data-icon-size="14"><span data-i18n="add">Add</span></button>
+            <button type="button" class="btn btn-ghost btn-sm" id="req-department-new-cancel" data-icon="xCircle" data-icon-size="14"></button>
+          </div>
         </div>
         <div class="field">
           <label for="req-workarea" data-i18n="fieldWorkArea">Area / job that needs materials</label>
@@ -167,15 +175,15 @@
 
 </div>
 
-<div class="app-version no-print">v20260911m</div>
+<div class="app-version no-print">v20260911n</div>
 
 <!-- Third-party: Supabase client (create_public_request RPC only) -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-<script src="js/config.js?v=20260911m"></script>
-<script src="js/db.js?v=20260911m"></script>
-<script src="js/i18n.js?v=20260911m"></script>
-<script src="js/icons.js?v=20260911m"></script>
-<script src="js/request.js?v=20260911m"></script>
+<script src="js/config.js?v=20260911n"></script>
+<script src="js/db.js?v=20260911n"></script>
+<script src="js/i18n.js?v=20260911n"></script>
+<script src="js/icons.js?v=20260911n"></script>
+<script src="js/request.js?v=20260911n"></script>
 </body>
 </html>
