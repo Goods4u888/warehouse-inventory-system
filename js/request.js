@@ -274,6 +274,63 @@ async function onAddDepartment(newInput, newRow) {
   });
 })();
 
+// ---- Work area dropdown ---------------------------------------------------
+// Same "reference table + inline add" pattern as Building below. Required
+// (unlike Building), so the placeholder option is disabled — same reasoning
+// as the Department dropdown above.
+let workAreas = [];
+
+async function loadWorkAreas() {
+  try {
+    workAreas = await DB.listWorkAreas();
+    renderWorkAreaOptions();
+  } catch (_) {
+    // Dropdown just comes up empty (only the placeholder option) — same
+    // silent fallback as loadItems()/loadBuildings() above.
+  }
+}
+function renderWorkAreaOptions(selected = '') {
+  const sel = document.getElementById('req-workarea');
+  const current = selected || sel.value;
+  sel.innerHTML = `
+    <option value="" disabled ${current ? '' : 'selected'}>${t('noWorkArea')}</option>
+    ${workAreas.map((w) => `<option value="${escapeHtml(w.name)}" ${w.name === current ? 'selected' : ''}>${escapeHtml(w.name)}</option>`).join('')}
+  `;
+}
+async function onAddWorkArea(newInput, newRow) {
+  const name = newInput.value.trim();
+  const errEl = document.getElementById('request-error');
+  errEl.innerHTML = '';
+  if (!name) return;
+  try {
+    await DB.createWorkArea(name);
+    workAreas = await DB.listWorkAreas();
+    renderWorkAreaOptions(name);
+    newInput.value = '';
+    newRow.hidden = true;
+  } catch (err) {
+    const msg = /duplicate|unique/i.test(err.message || '') ? t('errorWorkAreaExists') : (err.message || 'Could not add area');
+    errEl.innerHTML = `<div class="form-error">${escapeHtml(msg)}</div>`;
+  }
+}
+(() => {
+  const addBtn = document.getElementById('req-workarea-add-btn');
+  const newRow = document.getElementById('req-workarea-new-row');
+  const newInput = document.getElementById('req-workarea-new-input');
+  addBtn.addEventListener('click', () => {
+    newRow.hidden = !newRow.hidden;
+    if (!newRow.hidden) newInput.focus();
+  });
+  document.getElementById('req-workarea-new-cancel').addEventListener('click', () => {
+    newInput.value = '';
+    newRow.hidden = true;
+  });
+  document.getElementById('req-workarea-new-confirm').addEventListener('click', () => onAddWorkArea(newInput, newRow));
+  newInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); onAddWorkArea(newInput, newRow); }
+  });
+})();
+
 // ---- Building dropdown ---------------------------------------------------
 // Same "reference table + inline add" pattern as Manage Staff's department
 // dropdown (js/app.js), but open to anon here (see "buildings" RLS in
@@ -403,4 +460,5 @@ applyStaticIcons();
 updateCommentRequirement();
 loadItems();
 loadDepartments();
+loadWorkAreas();
 loadBuildings();

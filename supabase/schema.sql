@@ -180,22 +180,45 @@ on conflict (name) do nothing;
 -- ----------------------------------------------------------------------------
 -- 1e. Buildings — reference table backing the new "Building" dropdown on
 --     both request forms (the anonymous public form and the authenticated
---     New Request flow), alongside the existing free-text work_area detail
---     field (e.g. "3rd floor restroom") — building is the coarser,
---     reportable category ("Building A"), work_area is the finer detail.
---     Feeds building_report (section 6 below): count of requests per
---     building, for a "which area needs maintenance most" view. Unlike
---     departments above (staff/admin only), anyone can add a new building
---     from either request form — a building name is no more sensitive than
---     the free text work_area already lets anyone type unmoderated today,
---     and keeping it open means an anonymous requester in a building not
---     yet listed isn't blocked.
+--     New Request flow), alongside the work_area detail field (e.g. "3rd
+--     floor restroom", itself now similarly backed by work_areas below) —
+--     building is the coarser, reportable category ("Building A"),
+--     work_area is the finer detail. Feeds building_report (section 6
+--     below): count of requests per building, for a "which area needs
+--     maintenance most" view. Unlike departments above (staff/admin only),
+--     anyone can add a new building from either request form — a building
+--     name is no more sensitive than the free text work_area already let
+--     anyone type unmoderated before it got this same treatment, and
+--     keeping it open means an anonymous requester in a building not yet
+--     listed isn't blocked.
 -- ----------------------------------------------------------------------------
 create table if not exists buildings (
   id          uuid primary key default gen_random_uuid(),
   name        text unique not null,
   created_at  timestamptz not null default now()
 );
+
+-- ----------------------------------------------------------------------------
+-- 1f. Work areas — reference table backing the "งาน/พื้นที่ที่ต้องการวัสดุ"
+--     dropdown on the request forms, same "reference table + inline add"
+--     pattern and same open (anon can view+add) reasoning as buildings just
+--     above: the field was already free text anyone could type unmoderated,
+--     so a shared suggestions list is a data-quality upgrade, not a new
+--     exposure. requests.work_area itself stays a plain text column (see
+--     section 3 below) — this table only supplies the dropdown's options,
+--     it isn't a foreign key.
+-- ----------------------------------------------------------------------------
+create table if not exists work_areas (
+  id          uuid primary key default gen_random_uuid(),
+  name        text unique not null,
+  created_at  timestamptz not null default now()
+);
+
+-- Backfill: work_area values typed freely before this table existed
+-- shouldn't vanish from the dropdown's suggestions once it switches over.
+insert into work_areas (name)
+select distinct work_area from requests where work_area is not null and work_area <> ''
+on conflict (name) do nothing;
 
 -- ----------------------------------------------------------------------------
 -- 2. Lots — LEGACY as of 2026-09-08. Originally one row per receiving
@@ -1026,13 +1049,18 @@ $$;
 -- quantity/availability anywhere — same as before, and same as
 -- create_public_request(): a request never reserves or blocks on stock on
 -- hand, a human decides feasibility at fulfillment time.
--- v3 (current): adds p_building, same as create_public_request() above.
+-- v3: adds p_building, same as create_public_request() above.
+-- v4 (current): adds p_work_area, same as create_public_request() above —
+-- the authenticated "New Request" flow gets the same Work Area dropdown as
+-- the public form (js/app.js openNewRequestSheet()).
 drop function if exists create_authenticated_request(uuid, numeric, date, text, text, text);
 drop function if exists create_authenticated_request(jsonb, text, date, text, text);
+drop function if exists create_authenticated_request(jsonb, text, date, text, text, text);
 
 create or replace function create_authenticated_request(
   p_items jsonb default null, p_comment text default null, p_needed_by date default null,
-  p_requester_name text default null, p_department text default null, p_building text default null
+  p_requester_name text default null, p_department text default null, p_building text default null,
+  p_work_area text default null
 ) returns setof requests
 language plpgsql
 security definer
@@ -1052,8 +1080,10 @@ declare
   v_dept text;
   v_requester_user_id uuid;
   v_building text;
+  v_work_area text;
 begin
   v_building := nullif(trim(p_building), '');
+  v_work_area := nullif(trim(p_work_area), '');
   select * into v_profile from user_profiles where id = auth.uid();
   if not found then
     raise exception 'No profile found for this account';
@@ -1096,16 +1126,16 @@ begin
   v_code := next_request_code();
 
   if v_item_count = 0 then
-    insert into requests (request_code, requester_name, department, notes, needed_by, requester_user_id, building)
-    values (v_code, v_name, v_dept, v_notes, p_needed_by, v_requester_user_id, v_building)
+    insert into requests (request_code, requester_name, department, notes, needed_by, requester_user_id, building, work_area)
+    values (v_code, v_name, v_dept, v_notes, p_needed_by, v_requester_user_id, v_building, v_work_area)
     returning * into v_row;
     return next v_row;
   else
     for v_item in select * from jsonb_array_elements(p_items) loop
       v_sku_id := (v_item->>'sku_id')::uuid;
       v_qty := (v_item->>'qty')::numeric;
-      insert into requests (request_code, requester_name, department, sku_id, qty_requested, needed_by, notes, requester_user_id, building)
-      values (v_code, v_name, v_dept, v_sku_id, v_qty, p_needed_by, v_notes, v_requester_user_id, v_building)
+      insert into requests (request_code, requester_name, department, sku_id, qty_requested, needed_by, notes, requester_user_id, building, work_area)
+      values (v_code, v_name, v_dept, v_sku_id, v_qty, p_needed_by, v_notes, v_requester_user_id, v_building, v_work_area)
       returning * into v_row;
       return next v_row;
     end loop;
@@ -1208,7 +1238,7 @@ revoke execute on function issue_stock(uuid, uuid, numeric, text, text[]) from p
 revoke execute on function create_sku(text, text, text, text, numeric, numeric, text[]) from public;
 revoke execute on function create_public_request(text, text, text, text, jsonb, text) from public;
 revoke execute on function next_request_code() from public;
-revoke execute on function create_authenticated_request(jsonb, text, date, text, text, text) from public;
+revoke execute on function create_authenticated_request(jsonb, text, date, text, text, text, text) from public;
 revoke execute on function set_request_status(uuid, text) from public;
 revoke execute on function is_staff_or_admin() from public;
 revoke execute on function is_admin() from public;
@@ -1221,7 +1251,7 @@ grant execute on function issue_stock(uuid, uuid, numeric, text, text[]) to auth
 grant execute on function create_sku(text, text, text, text, numeric, numeric, text[]) to authenticated;
 grant execute on function create_public_request(text, text, text, text, jsonb, text) to anon, authenticated;
 grant execute on function next_request_code() to authenticated;
-grant execute on function create_authenticated_request(jsonb, text, date, text, text, text) to authenticated;
+grant execute on function create_authenticated_request(jsonb, text, date, text, text, text, text) to authenticated;
 grant execute on function set_request_status(uuid, text) to authenticated;
 -- Called from inside policy expressions (section 8), evaluated as the
 -- querying role — authenticated needs EXECUTE for those policies to work.
@@ -1257,6 +1287,7 @@ alter table departments enable row level security;
 alter table transaction_images enable row level security;
 alter table sku_images enable row level security;
 alter table buildings enable row level security;
+alter table work_areas enable row level security;
 alter table request_sequences enable row level security;
 alter table user_profiles enable row level security;
 
@@ -1361,6 +1392,12 @@ drop policy if exists "anyone can view buildings" on buildings;
 drop policy if exists "anyone can add buildings" on buildings;
 create policy "anyone can view buildings" on buildings for select to anon, authenticated using (true);
 create policy "anyone can add buildings" on buildings for insert to anon, authenticated with check (true);
+
+-- work_areas: deliberately open, same reasoning as buildings just above.
+drop policy if exists "anyone can view work areas" on work_areas;
+drop policy if exists "anyone can add work areas" on work_areas;
+create policy "anyone can view work areas" on work_areas for select to anon, authenticated using (true);
+create policy "anyone can add work areas" on work_areas for insert to anon, authenticated with check (true);
 
 -- transaction_images: evidence photos, written only by
 -- insert_transaction_images() (called from receive_stock/return_stock/

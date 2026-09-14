@@ -242,6 +242,23 @@ const DB = {
     return data;
   },
 
+  // ---- Work areas ---------------------------------------------------------
+  // Backs the "งาน/พื้นที่ที่ต้องการวัสดุ" dropdown on the request forms —
+  // same "reference table + inline add" pattern as buildings above, open to
+  // anon for the same reason (the public form's work-area field was already
+  // free text, so anon could already submit anything unmoderated).
+  async listWorkAreas() {
+    const { data, error } = await supabaseClient.from('work_areas').select('*').order('name');
+    if (error) throw error;
+    return data;
+  },
+
+  async createWorkArea(name) {
+    const { data, error } = await supabaseClient.from('work_areas').insert({ name }).select().single();
+    if (error) throw error;
+    return data;
+  },
+
   // ---- Stock (views) -------------------------------------------------------
   async stockBySku() {
     const { data, error } = await supabaseClient.from('stock_by_sku').select('*').order('sku_code');
@@ -312,6 +329,21 @@ const DB = {
   },
 
   // ---- Requests ---------------------------------------------------------------
+  // Same select shape as listRequests() below (skus/approver embed included)
+  // but targeted at one request_code regardless of status — used right
+  // after a successful submit to fetch the properly-joined rows for the
+  // post-submit "Export PDF" confirmation, independent of whatever status
+  // filter the Requests list currently has selected (see
+  // openNewRequestSheet() in app.js).
+  async getRequestByCode(code) {
+    const { data, error } = await supabaseClient
+      .from('requests')
+      .select('*, skus(sku_code, name, base_uom), approver:user_profiles!approved_by(name)')
+      .eq('request_code', code);
+    if (error) throw error;
+    return data;
+  },
+
   async listRequests({ status = null } = {}) {
     // approver:user_profiles!approved_by(name) — explicit FK hint since
     // requests has two FKs into user_profiles (approved_by and
@@ -336,7 +368,7 @@ const DB = {
   // items is a list of { skuId, qty } (like createPublicRequest below) — a
   // comment-only submission (no items) is also valid. Returns an array:
   // one row per item, all sharing one request_code.
-  async createRequest({ items, comment, neededBy, requesterName, department, building }) {
+  async createRequest({ items, comment, neededBy, requesterName, department, building, workArea }) {
     const { data, error } = await supabaseClient.rpc('create_authenticated_request', {
       p_items: items && items.length ? items.map((i) => ({ sku_id: i.skuId, qty: i.qty })) : null,
       p_comment: comment || null,
@@ -344,6 +376,7 @@ const DB = {
       p_requester_name: requesterName || null,
       p_department: department || null,
       p_building: building || null,
+      p_work_area: workArea || null,
     });
     if (error) throw error;
     return data;

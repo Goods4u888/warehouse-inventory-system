@@ -260,6 +260,11 @@ const I18N = {
     addDepartmentTitle: 'Add a new department',
     newDepartmentPlaceholder: 'New department name',
     errorDepartmentExists: 'That department already exists',
+    noWorkArea: '—',
+    addWorkAreaTitle: 'Add a new area',
+    newWorkAreaPlaceholder: 'New area name',
+    errorWorkAreaExists: 'That area already exists',
+    btnDone: 'Done',
 
     langToggle: 'ไทย',
   },
@@ -514,6 +519,11 @@ const I18N = {
     addDepartmentTitle: 'เพิ่มแผนกใหม่',
     newDepartmentPlaceholder: 'ชื่อแผนกใหม่',
     errorDepartmentExists: 'มีแผนกนี้อยู่แล้ว',
+    noWorkArea: '—',
+    addWorkAreaTitle: 'เพิ่มพื้นที่ใหม่',
+    newWorkAreaPlaceholder: 'ชื่อพื้นที่ใหม่',
+    errorWorkAreaExists: 'มีพื้นที่นี้อยู่แล้ว',
+    btnDone: 'เสร็จสิ้น',
 
     langToggle: 'EN',
   },

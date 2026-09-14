@@ -1383,16 +1383,20 @@ function nextStatusButton(r) {
   return `<button class="btn btn-outline btn-sm" data-advance="${r.id}" data-to="${next}">${icon('arrowRight', 14)}<span>${t('btnMarkStatus', statusLabel(next))}</span></button>`;
 }
 
-// "Export PDF" on a request card — same printable requisition slip as the
+// "Export PDF" on a request card, and on the post-submit confirmation in
+// openNewRequestSheet() below — same printable requisition slip as the
 // public form's post-submit confirmation screen (.print-sheet in
-// request.html/js/request.js), rebuilt here from the already-submitted
-// request's own rows in requestRows (one row per item, all sharing
-// request_code — see create_public_request()/create_authenticated_request()
-// in schema.sql) since admin.html has no per-field static markup to fill in
-// the way request.html does. Only ever called for a request that already
-// exists — there's nothing to print before create*_request() has run.
-function printRequestSlip(requestCode) {
-  const rows = requestRows.filter((r) => r.request_code === requestCode);
+// request.html/js/request.js). rowsOverride lets the post-submit
+// confirmation hand in rows it fetched directly (DB.getRequestByCode) —
+// the properly skus-joined shape, independent of whatever status filter
+// the Requests list currently has selected; without it, this filters the
+// already-loaded requestRows (one row per item, all sharing request_code —
+// see create_public_request()/create_authenticated_request() in
+// schema.sql), same as every other caller. Only ever called for a request
+// that already exists — there's nothing to print before create*_request()
+// has run.
+function printRequestSlip(requestCode, rowsOverride) {
+  const rows = rowsOverride || requestRows.filter((r) => r.request_code === requestCode);
   if (!rows.length) return;
   const first = rows[0];
   const itemRows = rows.filter((r) => r.sku_id);
@@ -1467,6 +1471,8 @@ document.getElementById('btn-new-request').addEventListener('click', openNewRequ
 // can't collide with request.html's own copy of these same ids.
 let nrItems = [];
 let nrBuildings = [];
+let nrDepartments = [];
+let nrWorkAreas = [];
 
 async function loadNrBuildings() {
   try {
@@ -1503,6 +1509,134 @@ async function onAddNrBuilding(newInput, newRow) {
   }
 }
 
+// Department dropdown — only rendered/relevant when showRequesterField is
+// true (Staff/Admin naming someone else): a plain Requester's own
+// department always comes from their profile server-side regardless of
+// what's sent (see create_authenticated_request() in schema.sql), same
+// reasoning that already hides the requester-name field for that role.
+async function loadNrDepartments() {
+  try {
+    nrDepartments = await DB.listDepartments();
+    renderNrDepartmentOptions();
+  } catch (err) {
+    toast(err.message || 'Could not load departments', 'error');
+  }
+}
+function renderNrDepartmentOptions(selected = '') {
+  const sel = document.getElementById('nr-department');
+  if (!sel) return;
+  const current = selected || sel.value;
+  sel.innerHTML = `
+    <option value="">${t('noDepartment')}</option>
+    ${nrDepartments.map((d) => `<option value="${escapeHtml(d.name)}" ${d.name === current ? 'selected' : ''}>${escapeHtml(d.name)}</option>`).join('')}
+  `;
+}
+async function onAddNrDepartment(newInput, newRow) {
+  const name = newInput.value.trim();
+  const errEl = document.getElementById('nr-error');
+  errEl.innerHTML = '';
+  if (!name) return;
+  try {
+    await DB.createDepartment(name);
+    nrDepartments = await DB.listDepartments();
+    renderNrDepartmentOptions(name);
+    newInput.value = '';
+    newRow.hidden = true;
+  } catch (err) {
+    const msg = /duplicate|unique/i.test(err.message || '') ? t('errorDepartmentExists') : (err.message || 'Could not add department');
+    errEl.innerHTML = `<div class="form-error">${escapeHtml(msg)}</div>`;
+  }
+}
+
+// Work area dropdown — same "reference table + inline add" pattern as
+// Building above, but unlike Department, shown to every role: it describes
+// where the work is, not an attribute of who's asking, so it's never
+// profile-derived. Required, same as on the public form.
+async function loadNrWorkAreas() {
+  try {
+    nrWorkAreas = await DB.listWorkAreas();
+    renderNrWorkAreaOptions();
+  } catch (err) {
+    toast(err.message || 'Could not load work areas', 'error');
+  }
+}
+function renderNrWorkAreaOptions(selected = '') {
+  const sel = document.getElementById('nr-workarea');
+  if (!sel) return;
+  const current = selected || sel.value;
+  sel.innerHTML = `
+    <option value="" disabled ${current ? '' : 'selected'}>${t('noWorkArea')}</option>
+    ${nrWorkAreas.map((w) => `<option value="${escapeHtml(w.name)}" ${w.name === current ? 'selected' : ''}>${escapeHtml(w.name)}</option>`).join('')}
+  `;
+}
+async function onAddNrWorkArea(newInput, newRow) {
+  const name = newInput.value.trim();
+  const errEl = document.getElementById('nr-error');
+  errEl.innerHTML = '';
+  if (!name) return;
+  try {
+    await DB.createWorkArea(name);
+    nrWorkAreas = await DB.listWorkAreas();
+    renderNrWorkAreaOptions(name);
+    newInput.value = '';
+    newRow.hidden = true;
+  } catch (err) {
+    const msg = /duplicate|unique/i.test(err.message || '') ? t('errorWorkAreaExists') : (err.message || 'Could not add area');
+    errEl.innerHTML = `<div class="form-error">${escapeHtml(msg)}</div>`;
+  }
+}
+
+// Shown inside the same Sheet right after a successful submit — same
+// "confirmation + Export PDF" shape as the public form's post-submit
+// screen (js/request.js showConfirmView()), adapted to this modal instead
+// of a full page swap. Fetches its own properly skus-joined rows via
+// DB.getRequestByCode() rather than reading requestRows, since the
+// Requests list's current status filter shouldn't determine whether this
+// can find the request it just created (see printRequestSlip() above).
+async function showNewRequestConfirmation(requestCode) {
+  let rows;
+  try {
+    rows = await DB.getRequestByCode(requestCode);
+  } catch (err) {
+    toast(err.message || 'Could not load the submitted request', 'error');
+    return;
+  }
+  if (!rows.length) return;
+  const first = rows[0];
+  const itemRows = rows.filter((r) => r.sku_id);
+
+  Sheet.open(t('requestSubmittedTitle'), `
+    <p class="field-hint" style="text-align:center;margin-bottom:var(--s4)">${t('requestSubmittedHint')}</p>
+    <div class="confirm-code" style="margin-bottom:var(--s4)">${escapeHtml(first.request_code)}</div>
+    <div class="confirm-rows">
+      <div class="confirm-row"><span>${t('fieldRequesterName2')}</span><strong>${escapeHtml(first.requester_name)}</strong></div>
+      <div class="confirm-row"><span>${t('fieldDepartment')}</span><strong>${escapeHtml(first.department || t('noDepartment'))}</strong></div>
+      <div class="confirm-row"><span>${t('fieldWorkArea')}</span><strong>${escapeHtml(first.work_area || t('noWorkArea'))}</strong></div>
+      <div class="confirm-row"><span>${t('fieldBuilding')}</span><strong>${escapeHtml(first.building || t('noBuilding'))}</strong></div>
+    </div>
+    ${itemRows.length ? `
+      <p class="eyebrow" style="margin-top:var(--s4)">${t('confirmItemsHeading')}</p>
+      <div class="req-item-list">
+        ${itemRows.map((r) => `
+          <div class="req-item-row req-item-row-readonly">
+            <span class="req-item-row-text">
+              <strong>${escapeHtml(r.skus?.name || '')}</strong>
+              <span class="card-meta mono">${escapeHtml(r.skus?.sku_code || '')}</span>
+            </span>
+            <span class="req-item-row-qty-display">${fmtQty(r.qty_requested)} ${escapeHtml(r.skus?.base_uom || '')}</span>
+          </div>
+        `).join('')}
+      </div>
+    ` : ''}
+    ${first.notes ? `<div class="confirm-comment" style="margin-top:var(--s4)">${escapeHtml(first.notes)}</div>` : ''}
+    <button type="button" class="btn btn-outline btn-block" id="nrc-print" style="margin-top:var(--s5)">${icon('printer', 16)}<span>${t('btnPrintPdf')}</span></button>
+    <button type="button" class="btn btn-primary btn-block" id="nrc-done" style="margin-top:var(--s3)">${icon('checkCircle', 16)}<span>${t('btnDone')}</span></button>
+  `);
+  applyStaticIcons();
+  document.getElementById('nrc-print').addEventListener('click', () => printRequestSlip(requestCode, rows));
+  document.getElementById('nrc-done').addEventListener('click', () => Sheet.close());
+}
+
 function openNewRequestSheet() {
   nrItems = [];
   // A Requester's own identity is never editable here — the RPC always uses
@@ -1520,6 +1654,18 @@ function openNewRequestSheet() {
           <input type="text" id="nr-requester">
           <p class="field-hint">${t('fieldRequesterNameOptionalHint')}</p>
         </div>
+        <div class="field">
+          <label for="nr-department">${t('fieldDepartment')}</label>
+          <div class="field-with-btn">
+            <select id="nr-department"></select>
+            <button type="button" class="btn-icon-add" id="nr-department-add-btn" title="${t('addDepartmentTitle')}" aria-label="${t('addDepartmentTitle')}">${icon('plusCircle', 18)}</button>
+          </div>
+          <div class="new-category-row" id="nr-department-new-row" hidden>
+            <input type="text" id="nr-department-new-input" placeholder="${t('newDepartmentPlaceholder')}">
+            <button type="button" class="btn btn-outline btn-sm" id="nr-department-new-confirm">${icon('check', 14)}<span>${t('add')}</span></button>
+            <button type="button" class="btn btn-ghost btn-sm" id="nr-department-new-cancel">${icon('xCircle', 14)}</button>
+          </div>
+        </div>
       ` : ''}
       <div class="field">
         <label>${t('fieldSelectItems')}</label>
@@ -1532,6 +1678,18 @@ function openNewRequestSheet() {
       <div class="field">
         <label for="nr-needed">${t('fieldNeededBy')}</label>
         <input type="date" id="nr-needed">
+      </div>
+      <div class="field">
+        <label for="nr-workarea">${t('fieldWorkArea')}</label>
+        <div class="field-with-btn">
+          <select id="nr-workarea" required></select>
+          <button type="button" class="btn-icon-add" id="nr-workarea-add-btn" title="${t('addWorkAreaTitle')}" aria-label="${t('addWorkAreaTitle')}">${icon('plusCircle', 18)}</button>
+        </div>
+        <div class="new-category-row" id="nr-workarea-new-row" hidden>
+          <input type="text" id="nr-workarea-new-input" placeholder="${t('newWorkAreaPlaceholder')}">
+          <button type="button" class="btn btn-outline btn-sm" id="nr-workarea-new-confirm">${icon('check', 14)}<span>${t('add')}</span></button>
+          <button type="button" class="btn btn-ghost btn-sm" id="nr-workarea-new-cancel">${icon('xCircle', 14)}</button>
+        </div>
       </div>
       <div class="field">
         <label for="nr-building">${t('fieldBuilding')}</label>
@@ -1556,6 +1714,7 @@ function openNewRequestSheet() {
   applyStaticIcons();
   renderNrItemList();
   loadNrBuildings();
+  loadNrWorkAreas();
   document.getElementById('nr-item-search').addEventListener('input', renderNrItemResults);
   const nrBuildingAddBtn = document.getElementById('nr-building-add-btn');
   const nrBuildingNewRow = document.getElementById('nr-building-new-row');
@@ -1572,6 +1731,39 @@ function openNewRequestSheet() {
   nrBuildingNewInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); onAddNrBuilding(nrBuildingNewInput, nrBuildingNewRow); }
   });
+  const nrWorkAreaAddBtn = document.getElementById('nr-workarea-add-btn');
+  const nrWorkAreaNewRow = document.getElementById('nr-workarea-new-row');
+  const nrWorkAreaNewInput = document.getElementById('nr-workarea-new-input');
+  nrWorkAreaAddBtn.addEventListener('click', () => {
+    nrWorkAreaNewRow.hidden = !nrWorkAreaNewRow.hidden;
+    if (!nrWorkAreaNewRow.hidden) nrWorkAreaNewInput.focus();
+  });
+  document.getElementById('nr-workarea-new-cancel').addEventListener('click', () => {
+    nrWorkAreaNewInput.value = '';
+    nrWorkAreaNewRow.hidden = true;
+  });
+  document.getElementById('nr-workarea-new-confirm').addEventListener('click', () => onAddNrWorkArea(nrWorkAreaNewInput, nrWorkAreaNewRow));
+  nrWorkAreaNewInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); onAddNrWorkArea(nrWorkAreaNewInput, nrWorkAreaNewRow); }
+  });
+  if (showRequesterField) {
+    loadNrDepartments();
+    const nrDepartmentAddBtn = document.getElementById('nr-department-add-btn');
+    const nrDepartmentNewRow = document.getElementById('nr-department-new-row');
+    const nrDepartmentNewInput = document.getElementById('nr-department-new-input');
+    nrDepartmentAddBtn.addEventListener('click', () => {
+      nrDepartmentNewRow.hidden = !nrDepartmentNewRow.hidden;
+      if (!nrDepartmentNewRow.hidden) nrDepartmentNewInput.focus();
+    });
+    document.getElementById('nr-department-new-cancel').addEventListener('click', () => {
+      nrDepartmentNewInput.value = '';
+      nrDepartmentNewRow.hidden = true;
+    });
+    document.getElementById('nr-department-new-confirm').addEventListener('click', () => onAddNrDepartment(nrDepartmentNewInput, nrDepartmentNewRow));
+    nrDepartmentNewInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); onAddNrDepartment(nrDepartmentNewInput, nrDepartmentNewRow); }
+    });
+  }
   document.getElementById('form-new-request').addEventListener('submit', async (e) => {
     e.preventDefault();
     const errEl = document.getElementById('nr-error');
@@ -1591,16 +1783,20 @@ function openNewRequestSheet() {
     }
 
     try {
-      await DB.createRequest({
+      const created = await DB.createRequest({
         items: nrItems.map((it) => ({ skuId: it.id, qty: Number(it.qty) })),
         comment: comment || null,
         neededBy: document.getElementById('nr-needed').value,
         requesterName: showRequesterField ? document.getElementById('nr-requester').value.trim() : '',
+        department: showRequesterField ? document.getElementById('nr-department').value.trim() : '',
         building: document.getElementById('nr-building').value.trim() || null,
+        workArea: document.getElementById('nr-workarea').value.trim() || null,
       });
-      Sheet.close();
       toast(t('toastRequestSubmitted'), 'success');
       loadRequests();
+      const requestCode = (Array.isArray(created) ? created[0] : created)?.request_code;
+      if (requestCode) showNewRequestConfirmation(requestCode);
+      else Sheet.close();
     } catch (err) {
       errEl.innerHTML = `<div class="form-error">${escapeHtml(err.message || 'Could not submit request')}</div>`;
     }
