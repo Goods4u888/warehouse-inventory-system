@@ -1336,7 +1336,7 @@ function fulfillRowHtml(row) {
       <div class="field" style="margin-top:var(--s2)">
         <label for="fulfill-qty-${row.id}">${t('fieldActualQty')}</label>
         <input type="number" class="fulfill-qty-input" id="fulfill-qty-${row.id}" data-id="${row.id}" min="0.0001" step="any" max="${row.onHand}" value="${row.actualQty}" ${row.declined ? 'disabled' : ''}>
-        <p class="field-hint">${t('hintRequested', fmtQty(row.requestedQty), escapeHtml(row.baseUom))}</p>
+        <p class="field-hint">${t('hintRequested', fmtQty(row.requestedQty), escapeHtml(row.baseUom))} · ${t('hintOnHand', fmtQty(row.onHand), escapeHtml(row.baseUom))}</p>
       </div>
       ${row.declined ? `
         <div class="field">
@@ -1439,10 +1439,22 @@ function onFulfillReviewClick() {
   const deliveringRows = fulfillRows.filter((r) => !r.declined);
   const decliningRows = fulfillRows.filter((r) => r.declined);
 
-  const badQty = deliveringRows.find((r) => !(r.actualQty > 0) || r.actualQty > r.onHand);
-  if (badQty) {
+  const missingQty = deliveringRows.find((r) => !(r.actualQty > 0));
+  if (missingQty) {
     errEl.innerHTML = `<div class="form-error">${escapeHtml(t('errorQtyRequired'))}</div>`;
-    document.getElementById(`fulfill-qty-${badQty.id}`)?.focus();
+    document.getElementById(`fulfill-qty-${missingQty.id}`)?.focus();
+    return;
+  }
+  // Separate from the check above on purpose — "you left this blank" and
+  // "there isn't enough on the shelf" are different problems with
+  // different fixes (type a number vs. lower the qty or mark it
+  // undeliverable), and lumping them into one generic message was exactly
+  // what made a real insufficient-stock case unreadable as anything but
+  // "you forgot to enter a quantity" (see REQ-260914-008).
+  const overStock = deliveringRows.find((r) => Number(r.actualQty) > Number(r.onHand));
+  if (overStock) {
+    errEl.innerHTML = `<div class="form-error">${escapeHtml(t('errorInsufficientStockFor', overStock.name, fmtQty(overStock.onHand), overStock.baseUom))}</div>`;
+    document.getElementById(`fulfill-qty-${overStock.id}`)?.focus();
     return;
   }
   const missingNote = decliningRows.find((r) => !r.declineNote.trim());
