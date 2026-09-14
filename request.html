@@ -8,8 +8,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 
-<link rel="stylesheet" href="css/tokens.css?v=20260911r">
-<link rel="stylesheet" href="css/app.css?v=20260911r">
+<link rel="stylesheet" href="css/tokens.css?v=20260911s">
+<link rel="stylesheet" href="css/app.css?v=20260911s">
 </head>
 <body>
 
@@ -55,15 +55,7 @@
         </div>
         <div class="field">
           <label for="req-workarea" data-i18n="fieldWorkArea">Area / job that needs materials</label>
-          <div class="field-with-btn">
-            <select id="req-workarea" required></select>
-            <button type="button" class="btn-icon-add" id="req-workarea-add-btn" data-icon="plusCircle" data-icon-size="18" title="Add a new area" aria-label="Add a new area"></button>
-          </div>
-          <div class="new-category-row" id="req-workarea-new-row" hidden>
-            <input type="text" id="req-workarea-new-input" data-i18n-placeholder="newWorkAreaPlaceholder" placeholder="New area name">
-            <button type="button" class="btn btn-outline btn-sm" id="req-workarea-new-confirm" data-icon="check" data-icon-size="14"><span data-i18n="add">Add</span></button>
-            <button type="button" class="btn btn-ghost btn-sm" id="req-workarea-new-cancel" data-icon="xCircle" data-icon-size="14"></button>
-          </div>
+          <input type="text" id="req-workarea" data-i18n-placeholder="fieldWorkAreaPh" placeholder="e.g. Building A, 3rd floor restroom" required>
         </div>
         <div class="field">
           <label for="req-building" data-i18n="fieldBuilding">Building (optional)</label>
@@ -183,15 +175,15 @@
 
 </div>
 
-<div class="app-version no-print">v20260911r</div>
+<div class="app-version no-print">v20260911s</div>
 
 <!-- Third-party: Supabase client (create_public_request RPC only) -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-<script src="js/config.js?v=20260911r"></script>
-<script src="js/db.js?v=20260911r"></script>
-<script src="js/i18n.js?v=20260911r"></script>
-<script src="js/icons.js?v=20260911r"></script>
-<script src="js/request.js?v=20260911r"></script>
+<script src="js/config.js?v=20260911s"></script>
+<script src="js/db.js?v=20260911s"></script>
+<script src="js/i18n.js?v=20260911s"></script>
+<script src="js/icons.js?v=20260911s"></script>
+<script src="js/request.js?v=20260911s"></script>
 </body>
 </html>
