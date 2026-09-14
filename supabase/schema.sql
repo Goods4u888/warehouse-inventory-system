@@ -711,12 +711,22 @@ $$;
 -- lots.source is legacy, see above). Admin-only — see grants below, not
 -- reachable from the public form.
 drop function if exists return_stock(uuid, numeric, text, text, text);
+drop function if exists return_stock(uuid, numeric, text, text, text, text[]);
 
--- v2 (current): adds p_image_paths, same reasoning as receive_stock above.
+-- v2: adds p_image_paths, same reasoning as receive_stock above.
+-- v3 (current): adds p_request_id — still optional/nullable (a return
+-- genuinely doesn't always have one, per the "deliberately freeform"
+-- reasoning above), but when the Return tab's "return against a request
+-- number" screen (js/app.js openReturnByRequestSheet()) already knows
+-- which request a return is against, passing it through here is what lets
+-- movement_history's request_code column (left join requests r on r.id =
+-- t.request_id) show it — before this, every return showed "—" there even
+-- when staff had explicitly looked the request up, which is exactly the
+-- gap this closes.
 create or replace function return_stock(
   p_sku_id uuid, p_qty numeric, p_uom text,
   p_returned_by text default null, p_note text default null,
-  p_image_paths text[] default null
+  p_image_paths text[] default null, p_request_id uuid default null
 ) returns skus
 language plpgsql
 as $$
@@ -736,8 +746,8 @@ begin
     raise exception 'SKU not found';
   end if;
 
-  insert into transactions (type, sku_id, qty, uom, performed_by, note)
-  values ('return', p_sku_id, p_qty, p_uom, p_returned_by, p_note)
+  insert into transactions (type, sku_id, qty, uom, performed_by, note, request_id)
+  values ('return', p_sku_id, p_qty, p_uom, p_returned_by, p_note, p_request_id)
   returning * into v_txn;
 
   perform insert_transaction_images(v_txn.id, p_image_paths);
@@ -1288,7 +1298,7 @@ $$;
 revoke execute on function insert_transaction_images(uuid, text[]) from public;
 revoke execute on function insert_sku_images(uuid, text[]) from public;
 revoke execute on function receive_stock(uuid, numeric, text, text, text, text[]) from public;
-revoke execute on function return_stock(uuid, numeric, text, text, text, text[]) from public;
+revoke execute on function return_stock(uuid, numeric, text, text, text, text[], uuid) from public;
 revoke execute on function issue_stock(uuid, uuid, numeric, text, text[]) from public;
 revoke execute on function create_sku(text, text, text, text, numeric, numeric, text[]) from public;
 revoke execute on function create_public_request(text, text, text, text, jsonb, text) from public;
@@ -1302,7 +1312,7 @@ revoke execute on function is_admin() from public;
 grant execute on function insert_transaction_images(uuid, text[]) to authenticated;
 grant execute on function insert_sku_images(uuid, text[]) to authenticated;
 grant execute on function receive_stock(uuid, numeric, text, text, text, text[]) to authenticated;
-grant execute on function return_stock(uuid, numeric, text, text, text, text[]) to authenticated;
+grant execute on function return_stock(uuid, numeric, text, text, text, text[], uuid) to authenticated;
 grant execute on function issue_stock(uuid, uuid, numeric, text, text[]) to authenticated;
 grant execute on function create_sku(text, text, text, text, numeric, numeric, text[]) to authenticated;
 grant execute on function create_public_request(text, text, text, text, jsonb, text) to anon, authenticated;

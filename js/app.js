@@ -1084,6 +1084,7 @@ document.getElementById('btn-rt-lookup-request').addEventListener('click', async
     returnByRequestRows = result.items.map((tx) => ({
       txnId: tx.id,
       skuId: tx.sku_id,
+      requestId: tx.request_id,
       name: tx.skus?.name || '',
       skuCode: tx.skus?.sku_code || '',
       baseUom: tx.skus?.base_uom || tx.uom,
@@ -1187,7 +1188,7 @@ async function onReturnByRequestSave() {
   try {
     const imagePaths = await uploadEvidenceFor('rtreq', 'return');
     for (const row of returningRows) {
-      await DB.returnStock({ skuId: row.skuId, qty: Number(row.returnQty), uom: row.baseUom, returnedBy, note: note || null, imagePaths });
+      await DB.returnStock({ skuId: row.skuId, qty: Number(row.returnQty), uom: row.baseUom, returnedBy, note: note || null, imagePaths, requestId: row.requestId });
     }
     toast(t('toastReturnByRequestDone', returningRows.length), 'success');
     resetEvidence('rtreq');

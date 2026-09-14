@@ -315,7 +315,7 @@ const DB = {
   // straight onto the item's qty_on_hand, same as receiving — see
   // return_stock() in schema.sql. Freeform: not tied to a specific original
   // request.
-  async returnStock({ skuId, qty, uom, returnedBy, note, imagePaths }) {
+  async returnStock({ skuId, qty, uom, returnedBy, note, imagePaths, requestId }) {
     const { data, error } = await supabaseClient.rpc('return_stock', {
       p_sku_id: skuId,
       p_qty: qty,
@@ -323,6 +323,7 @@ const DB = {
       p_returned_by: returnedBy || null,
       p_note: note || null,
       p_image_paths: imagePaths && imagePaths.length ? imagePaths : null,
+      p_request_id: requestId || null,
     });
     if (error) throw error;
     return data;
@@ -368,7 +369,7 @@ const DB = {
     const ids = reqs.map((r) => r.id);
     const { data: txns, error: txErr } = await supabaseClient
       .from('transactions')
-      .select('id, sku_id, qty, uom, skus(sku_code, name, base_uom)')
+      .select('id, sku_id, qty, uom, request_id, skus(sku_code, name, base_uom)')
       .eq('type', 'issue')
       .in('request_id', ids);
     if (txErr) throw txErr;
