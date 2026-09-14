@@ -8,8 +8,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap">
 
-<link rel="stylesheet" href="css/tokens.css?v=20260911n">
-<link rel="stylesheet" href="css/app.css?v=20260911n">
+<link rel="stylesheet" href="css/tokens.css?v=20260911o">
+<link rel="stylesheet" href="css/app.css?v=20260911o">
 </head>
 <body>
 
@@ -301,18 +301,27 @@
      styling that doesn't apply here). -->
 <div class="admin-print-sheet print-sticker-grid" id="admin-print-sheet"></div>
 
-<div class="app-version no-print">v20260911n</div>
+<!-- Print-only target for "Export PDF" on a request card (Requests view —
+     printRequestSlip() in app.js): the same requisition-slip layout as
+     request.html's own .print-sheet (shared styling in app.css), built here
+     entirely in JS from the already-submitted request's rows in
+     requestRows, since admin.html has no per-field static markup to fill
+     in the way request.html does. Same hide/show-only-this-on-print pattern
+     as #admin-print-sheet above. -->
+<div class="print-sheet" id="request-print-sheet"></div>
+
+<div class="app-version no-print">v20260911o</div>
 
 <!-- Third-party: Supabase client, QR generation, QR scanning -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.js"></script>
 
-<script src="js/config.js?v=20260911n"></script>
-<script src="js/db.js?v=20260911n"></script>
-<script src="js/qr.js?v=20260911n"></script>
-<script src="js/i18n.js?v=20260911n"></script>
-<script src="js/icons.js?v=20260911n"></script>
-<script src="js/app.js?v=20260911n"></script>
+<script src="js/config.js?v=20260911o"></script>
+<script src="js/db.js?v=20260911o"></script>
+<script src="js/qr.js?v=20260911o"></script>
+<script src="js/i18n.js?v=20260911o"></script>
+<script src="js/icons.js?v=20260911o"></script>
+<script src="js/app.js?v=20260911o"></script>
 </body>
 </html>

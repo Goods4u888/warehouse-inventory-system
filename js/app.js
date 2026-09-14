@@ -1346,9 +1346,15 @@ function renderRequestsList() {
       </div>
       ${r.status === 'fulfilled' && r.picked_up_by ? `<div class="card-meta" style="margin-top:var(--s2)">${escapeHtml(t('pickedUpBy', r.picked_up_by))}</div>` : ''}
       ${r.approver?.name ? `<div class="card-meta" style="margin-top:var(--s1)">${escapeHtml(t('approvedBy', r.approver.name))}</div>` : ''}
+      <div class="card-row" style="margin-top:var(--s2)">
+        <button class="btn btn-ghost btn-sm" data-print="${escapeHtml(r.request_code)}" title="${escapeHtml(t('btnPrintPdf'))}" aria-label="${escapeHtml(t('btnPrintPdf'))}">${icon('printer', 14)}<span>${t('btnPrintPdf')}</span></button>
+      </div>
     </div>
   `;
   }).join('');
+  list.querySelectorAll('[data-print]').forEach((btn) => {
+    btn.addEventListener('click', () => printRequestSlip(btn.dataset.print));
+  });
   list.querySelectorAll('[data-advance]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       try {
@@ -1375,6 +1381,81 @@ function nextStatusButton(r) {
   const next = { pending: 'preparing', preparing: 'ready' }[r.status];
   if (!next) return '';
   return `<button class="btn btn-outline btn-sm" data-advance="${r.id}" data-to="${next}">${icon('arrowRight', 14)}<span>${t('btnMarkStatus', statusLabel(next))}</span></button>`;
+}
+
+// "Export PDF" on a request card — same printable requisition slip as the
+// public form's post-submit confirmation screen (.print-sheet in
+// request.html/js/request.js), rebuilt here from the already-submitted
+// request's own rows in requestRows (one row per item, all sharing
+// request_code — see create_public_request()/create_authenticated_request()
+// in schema.sql) since admin.html has no per-field static markup to fill in
+// the way request.html does. Only ever called for a request that already
+// exists — there's nothing to print before create*_request() has run.
+function printRequestSlip(requestCode) {
+  const rows = requestRows.filter((r) => r.request_code === requestCode);
+  if (!rows.length) return;
+  const first = rows[0];
+  const itemRows = rows.filter((r) => r.sku_id);
+
+  const itemsHtml = itemRows.length
+    ? itemRows.map((r, i) => `
+        <tr>
+          <td class="print-col-no">${i + 1}</td>
+          <td>${escapeHtml(r.skus?.name || '')} <span class="mono">(${escapeHtml(r.skus?.sku_code || '')})</span></td>
+          <td class="print-col-qty">${fmtQty(r.qty_requested)}</td>
+          <td class="print-col-unit">${escapeHtml(r.skus?.base_uom || '')}</td>
+        </tr>
+      `).join('')
+    : `<tr><td colspan="4">${escapeHtml(t('generalRequest'))}</td></tr>`;
+
+  document.getElementById('request-print-sheet').innerHTML = `
+    <div class="print-sheet-letterhead">
+      <img class="print-sheet-logo" src="img/logo-property-office.png" alt="">
+      <div class="print-sheet-org-name">${escapeHtml(t('orgName'))}</div>
+    </div>
+    <div class="print-sheet-head">
+      <div class="print-sheet-title">${escapeHtml(t('printFormTitle'))}</div>
+      <div class="print-sheet-code">${escapeHtml(first.request_code)}</div>
+    </div>
+    <table class="print-sheet-meta">
+      <tr>
+        <th>${escapeHtml(t('printFieldDate'))}</th><td>${escapeHtml(fmtDateTime(first.created_at))}</td>
+        <th>${escapeHtml(t('fieldDepartment'))}</th><td>${escapeHtml(first.department || t('noDepartment'))}</td>
+      </tr>
+      <tr>
+        <th>${escapeHtml(t('fieldRequesterName2'))}</th><td>${escapeHtml(first.requester_name)}</td>
+        <th>${escapeHtml(t('fieldWorkArea'))}</th><td>${escapeHtml(first.work_area || '—')}</td>
+      </tr>
+      <tr>
+        <th>${escapeHtml(t('fieldBuilding'))}</th><td colspan="3">${escapeHtml(first.building || t('noBuilding'))}</td>
+      </tr>
+    </table>
+    <table class="print-sheet-items">
+      <thead>
+        <tr>
+          <th class="print-col-no">${escapeHtml(t('printColNo'))}</th>
+          <th>${escapeHtml(t('colItem'))}</th>
+          <th class="print-col-qty">${escapeHtml(t('printColQty'))}</th>
+          <th class="print-col-unit">${escapeHtml(t('fieldUnit'))}</th>
+        </tr>
+      </thead>
+      <tbody>${itemsHtml}</tbody>
+    </table>
+    ${first.notes ? `
+      <div class="print-sheet-notes">
+        <strong>${escapeHtml(t('fieldComment'))}</strong>
+        <span>${escapeHtml(first.notes)}</span>
+      </div>
+    ` : ''}
+    <div class="print-sheet-signatures">
+      <div class="print-sig-box"><div class="print-sig-line"></div><div class="print-sig-label">${escapeHtml(t('sigRequester'))}</div></div>
+      <div class="print-sig-box"><div class="print-sig-line"></div><div class="print-sig-label">${escapeHtml(t('sigApprover'))}</div></div>
+      <div class="print-sig-box"><div class="print-sig-line"></div><div class="print-sig-label">${escapeHtml(t('sigIssuer'))}</div></div>
+      <div class="print-sig-box"><div class="print-sig-line"></div><div class="print-sig-label">${escapeHtml(t('sigReceiver'))}</div></div>
+    </div>
+    <div class="print-sheet-footer">${escapeHtml(t('printFooterNote', first.request_code))}</div>
+  `;
+  window.print();
 }
 
 document.getElementById('btn-new-request').addEventListener('click', openNewRequestSheet);
